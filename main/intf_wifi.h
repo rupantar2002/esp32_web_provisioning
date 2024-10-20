@@ -7,6 +7,14 @@
 
 #define INTF_WIFI_PASSWORD_LEN 64
 
+#define INTF_WIFI_DEFAULT_SSID "ESP32"
+
+#define INTF_WIFI_DEFAULT_CHANNEL 0
+
+#define INTF_WIFI_MAX_CONNECTIONS 1
+
+#define INTF_WIFI_MAX_CONNECTION_RETRY 1
+
 enum intf_wifi_Status
 {
     INTF_WIFI_STATUS_OK = 0,
@@ -29,8 +37,15 @@ typedef uint8_t intf_wifi_Mode_t;
 
 typedef struct
 {
-    ssid[INTF_WIFI_SSID_LEN + 2];
-    pass[INTF_WIFI_PASSWORD_LEN + 2];
+    uint8_t ip[4];
+    uint8_t netmask[4];
+    uint8_t getway[4];
+} intf_wifi_IpInfo_t;
+
+typedef struct
+{
+    char ssid[INTF_WIFI_SSID_LEN + 2];
+    char pass[INTF_WIFI_PASSWORD_LEN + 2];
 } intf_wifi_Cred_t;
 
 typedef enum
@@ -81,7 +96,13 @@ typedef struct
 
 } intf_wifi_EventData_t;
 
-intf_wifi_Status_t intf_wifi_Init(intf_wifi_Mode_t mode);
+#define INTF_WIFI_IPV4(a, b, c, d) {(a), (b), (c), (d)}
+
+intf_wifi_Status_t intf_wifi_Init(void);
+
+intf_wifi_Status_t intf_wifi_SetIpInfo(intf_wifi_IpInfo_t *pIpInfo);
+
+intf_wifi_Status_t intf_wifi_SetMode(intf_wifi_Mode_t mode);
 
 intf_wifi_Status_t intf_wifi_SetCredentials(intf_wifi_Mode_t mode, intf_wifi_Cred_t *const pCred);
 
@@ -89,7 +110,7 @@ intf_wifi_Status_t intf_wifi_Start(void);
 
 intf_wifi_Status_t intf_wifi_Stop(void);
 
-bool intf_wifi_IsConnected(void);
+bool intf_wifi_IsStaConnected(void);
 
 intf_wifi_Status_t intf_wifi_Connect(void);
 
