@@ -383,9 +383,18 @@ bool intf_wifi_IsStaConnected(void)
 
 intf_wifi_Status_t intf_wifi_Connect(void)
 {
-    if (esp_wifi_connect() != ESP_OK)
+    if (gIntfWifi.flags.staConn)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO CONNECT TO REMOTE AP", __LINE__);
+        if (esp_wifi_connect() != ESP_OK)
+        {
+            INTF_WIFI_PRINT_ERR(" %d : FAILED TO CONNECT TO REMOTE AP", __LINE__);
+            return INTF_WIFI_STATUS_ERROR;
+        }
+        return INTF_WIFI_STATUS_OK;
+    }
+    else
+    {
+        INTF_WIFI_PRINT_ERR(" %d : DISCONNECT FIRST", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -394,7 +403,26 @@ intf_wifi_Status_t intf_wifi_Connect(void)
 
 intf_wifi_Status_t intf_wifi_Disconnect(void)
 {
-    return INTF_WIFI_STATUS_OK;
+    if (!gIntfWifi.flags.staConn)
+    {
+        if (esp_wifi_disconnect() != ESP_OK)
+        {
+            INTF_WIFI_PRINT_ERR(" %d : FAILED TO DISCONNECT FROM REMOTE AP", __LINE__);
+            return INTF_WIFI_STATUS_ERROR;
+        }
+        return INTF_WIFI_STATUS_OK;
+    }
+    else
+    {
+        INTF_WIFI_PRINT_ERR(" %d : NOT CONNECTED", __LINE__);
+        return INTF_WIFI_STATUS_ERROR;
+    }
+}
+
+intf_wifi_Status_t intf_wifi_StartScanning(void)
+{
+        esp_wifi_scan_start(NULL, true);
+
 }
 
 __attribute__((__weak__)) void intf_wifi_EventCallback(intf_wifi_Event_t event,
@@ -404,33 +432,106 @@ __attribute__((__weak__)) void intf_wifi_EventCallback(intf_wifi_Event_t event,
     (void)pData;
 }
 
-static void WifiEventHandler(void *arg,
-                             esp_event_base_t event_base,
-                             int32_t event_id,
-                             void *event_data)
+static void WifiEventHandler(void *arg, esp_event_base_t event_base,
+                             int32_t event_id, void *event_data)
 {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
+    if (event_base == WIFI_EVENT)
     {
-        wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
-        ESP_LOGI(TAG, "Station " MACSTR " joined, AID=%d",
-                 MAC2STR(event->mac), event->aid);
+        switch (event_id)
+        {
+        // AP
+        case WIFI_EVENT_AP_START:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_START");
+            break;
+        case WIFI_EVENT_AP_STOP:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_STOP");
+
+            break;
+        case WIFI_EVENT_AP_STACONNECTED:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_STACONNECTED");
+
+            break;
+        case WIFI_EVENT_AP_STADISCONNECTED:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_STADISCONNECTED");
+
+            break;
+            // STA
+        case WIFI_EVENT_STA_START:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_START");
+
+            break;
+        case WIFI_EVENT_STA_STOP:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_STOP");
+
+            break;
+        case WIFI_EVENT_STA_CONNECTED:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_CONNECTED");
+
+            break;
+        case WIFI_EVENT_STA_DISCONNECTED:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_DISCONNECTED");
+
+            break;
+        // Scan
+        case WIFI_EVENT_SCAN_DONE:
+            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_SCAN_DONE");
+
+            break;
+        default:
+            // ignored events
+            break;
+        }
     }
-    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED)
+    else if (event_base == IP_EVENT)
     {
-        wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
-        ESP_LOGI(TAG, "Station " MACSTR " left, AID=%d",
-                 MAC2STR(event->mac), event->aid);
+        switch (event_id)
+        {
+        // AP
+        case IP_EVENT_AP_STAIPASSIGNED:
+            INTF_WIFI_PRINT("IP_EVENT => IP_EVENT_AP_STAIPASSIGNED");
+
+            break;
+        // STA
+        case IP_EVENT_STA_GOT_IP:
+            INTF_WIFI_PRINT("IP_EVENT => IP_EVENT_STA_GOT_IP");
+
+            break;
+        case IP_EVENT_STA_LOST_IP:
+            INTF_WIFI_PRINT("IP_EVENT => IP_EVENT_STA_LOST_IP");
+
+            break;
+        default:
+            // ignored events
+            break;
+        }
     }
-    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    else
     {
-        esp_wifi_connect();
-        ESP_LOGI(TAG, "Station started");
+        // not used
     }
-    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
-    {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
-        // s_retry_num = 0;
-        // xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    }
+
+    // if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
+    // {
+    //     wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
+    //     ESP_LOGI(TAG, "Station " MACSTR " joined, AID=%d",
+    //              MAC2STR(event->mac), event->aid);
+    // }
+    // else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED)
+    // {
+    //     wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
+    //     ESP_LOGI(TAG, "Station " MACSTR " left, AID=%d",
+    //              MAC2STR(event->mac), event->aid);
+    // }
+    // else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    // {
+    //     esp_wifi_connect();
+    //     ESP_LOGI(TAG, "Station started");
+    // }
+    // else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    // {
+    //     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+    //     ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
+    //     // s_retry_num = 0;
+    //     // xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    // }
 }

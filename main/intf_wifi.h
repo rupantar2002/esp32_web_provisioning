@@ -56,6 +56,8 @@ typedef enum
     INTF_WIFI_EVENT_APSTA_CONNECTED,
     INTF_WIFI_EVENT_APSTA_DISCONNECTED,
     INTF_WIFI_EVENT_APSTA_GOT_IP,
+    INTF_WIFI_EVENT_STA_START,
+    INTF_WIFI_EVENT_STA_STOP,
     INTF_WIFI_EVENT_STA_CONNECTED,
     INTF_WIFI_EVENT_STA_DISCONNECTED,
     INTF_WIFI_EVENT_SCAN_COMPLETE,
@@ -64,6 +66,7 @@ typedef enum
 
 typedef struct
 {
+    /* Access Point Events */
     struct
     {
         uint32_t reserved;
@@ -84,6 +87,17 @@ typedef struct
         uint32_t reserved;
     } apStaDisconnected;
 
+    /* Station Events */
+    struct
+    {
+        uint32_t reserved;
+    } staStarted;
+
+    struct
+    {
+        uint32_t reserved;
+    } staStoped;
+
     struct
     {
         uint32_t reserved;
@@ -93,6 +107,12 @@ typedef struct
     {
         uint32_t reserved;
     } staDisconnected;
+
+    /* Scanning Events*/
+    struct
+    {
+        uint32_t reserved;
+    } scanComplete;
 
 } intf_wifi_EventData_t;
 
@@ -115,6 +135,8 @@ bool intf_wifi_IsStaConnected(void);
 intf_wifi_Status_t intf_wifi_Connect(void);
 
 intf_wifi_Status_t intf_wifi_Disconnect(void);
+
+intf_wifi_Status_t intf_wifi_StartScanning(void);
 
 void intf_wifi_EventCallback(intf_wifi_Event_t event, intf_wifi_EventData_t const *const pData);
 
