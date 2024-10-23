@@ -15,6 +15,14 @@
 
 #define INTF_WIFI_MAX_CONNECTION_RETRY 1
 
+/* Scan list can be static or dynamically allocated  */
+
+#define INTF_WIFI_SCAN_LIST_ALLOC
+
+
+
+
+
 enum intf_wifi_Status
 {
     INTF_WIFI_STATUS_OK = 0,
@@ -60,6 +68,8 @@ typedef enum
     INTF_WIFI_EVENT_STA_STOP,
     INTF_WIFI_EVENT_STA_CONNECTED,
     INTF_WIFI_EVENT_STA_DISCONNECTED,
+    INTF_WIFI_EVENT_STA_GOT_IP,
+    INTF_WIFI_EVENT_STA_LOST_IP,
     INTF_WIFI_EVENT_SCAN_COMPLETE,
     INTF_WIFI_EVENT_MAX,
 } intf_wifi_Event_t;
@@ -124,7 +134,8 @@ intf_wifi_Status_t intf_wifi_SetIpInfo(intf_wifi_IpInfo_t *pIpInfo);
 
 intf_wifi_Status_t intf_wifi_SetMode(intf_wifi_Mode_t mode);
 
-intf_wifi_Status_t intf_wifi_SetCredentials(intf_wifi_Mode_t mode, intf_wifi_Cred_t *const pCred);
+intf_wifi_Status_t intf_wifi_SetCredentials(intf_wifi_Mode_t mode,
+                                            intf_wifi_Cred_t *const pCred);
 
 intf_wifi_Status_t intf_wifi_Start(void);
 
@@ -138,6 +149,7 @@ intf_wifi_Status_t intf_wifi_Disconnect(void);
 
 intf_wifi_Status_t intf_wifi_StartScanning(void);
 
-void intf_wifi_EventCallback(intf_wifi_Event_t event, intf_wifi_EventData_t const *const pData);
+void intf_wifi_EventCallback(intf_wifi_Event_t event,
+                             intf_wifi_EventData_t const *const pData);
 
 #endif //__INTF_WIFI_H__

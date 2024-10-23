@@ -7,9 +7,11 @@
 #include <esp_err.h>
 #include "intf_wifi.h"
 
-#define INTF_WIFI_PRINT_ERR(fmt, ...) ESP_LOGE(TAG, fmt, ##__VA_ARGS__)
+#define INTF_WIFI_LOGE(fmt, ...) ESP_LOGE(TAG, fmt, ##__VA_ARGS__)
 
-#define INTF_WIFI_PRINT(fmt, ...) ESP_LOGW(TAG, fmt, ##__VA_ARGS__)
+#define INTF_WIFI_LOGD(fmt, ...) ESP_LOGW(TAG, fmt, ##__VA_ARGS__)
+
+#define INTF_WIFI_LOGI(fmt, ...) ESP_LOGI(TAG, fmt, ##__VA_ARGS__)
 
 typedef struct
 {
@@ -25,7 +27,8 @@ typedef struct
     // intf_wifi_Cred_t staCred; // TODO may not need to store localy
     esp_netif_t *apNetif;
     esp_netif_t *staNetif;
-
+    intf_wifi_Event_t evt;
+    intf_wifi_EventData_t evtData;
 } intf_wifi_Ctx_t;
 
 static const char *TAG = "INTF_WIFI";
@@ -83,7 +86,7 @@ static bool SetWifiMode(void)
 {
     if (esp_wifi_set_mode(gIntfWifi.mode) != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO SET MODE", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO SET MODE", __LINE__);
         return false;
     }
     else
@@ -100,7 +103,7 @@ static bool ConfigureInterface(wifi_interface_t intf, intf_wifi_Cred_t *const pC
 
     if (esp_wifi_get_config(intf, &wifiCfg) != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO GET INTERFACE [%d]", __LINE__, intf);
+        INTF_WIFI_LOGE(" %d : FAILED TO GET INTERFACE [%d]", __LINE__, intf);
         return false;
     }
 
@@ -133,14 +136,14 @@ static bool ConfigureInterface(wifi_interface_t intf, intf_wifi_Cred_t *const pC
         break;
 
     default:
-        INTF_WIFI_PRINT_ERR(" %d : INVALID INTERFACE [%d]", __LINE__, intf);
+        INTF_WIFI_LOGE(" %d : INVALID INTERFACE [%d]", __LINE__, intf);
         return false;
         break;
     }
 
     if (esp_wifi_set_config(intf, &wifiCfg) != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO CONFIGURE INTERFACE [%d]", __LINE__, intf);
+        INTF_WIFI_LOGE(" %d : FAILED TO CONFIGURE INTERFACE [%d]", __LINE__, intf);
         return false;
     }
     else
@@ -158,7 +161,7 @@ intf_wifi_Status_t intf_wifi_Init(void)
                                             NULL,
                                             NULL) != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO REGISTER WIFI EVENT", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO REGISTER WIFI EVENT", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -168,7 +171,7 @@ intf_wifi_Status_t intf_wifi_Init(void)
                                             NULL,
                                             NULL) != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO REGISTER IP EVENT", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO REGISTER IP EVENT", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -179,21 +182,21 @@ intf_wifi_Status_t intf_wifi_Init(void)
 
     if (esp_wifi_init(&cfg) != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO INIT WIFI", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO INIT WIFI", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
     gIntfWifi.apNetif = esp_netif_create_default_wifi_ap();
     if (gIntfWifi.apNetif == NULL)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO CREATE NETIF AP", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO CREATE NETIF AP", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
     gIntfWifi.staNetif = esp_netif_create_default_wifi_sta();
     if (gIntfWifi.staNetif == NULL)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO CREATE NETIF STA", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO CREATE NETIF STA", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -234,12 +237,12 @@ intf_wifi_Status_t intf_wifi_Init(void)
 
     if (errCode != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO SET DEFAULT INTERFACE", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO SET DEFAULT INTERFACE", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
     else
     {
-        INTF_WIFI_PRINT("WIFI INITIALIZED");
+        INTF_WIFI_LOGI("WIFI INITIALIZED");
         return INTF_WIFI_STATUS_OK;
     }
 }
@@ -248,7 +251,7 @@ intf_wifi_Status_t intf_wifi_SetIpInfo(intf_wifi_IpInfo_t *pIpInfo)
 {
     if (pIpInfo == NULL)
     {
-        INTF_WIFI_PRINT_ERR(" %d : INVALID IPINFO", __LINE__);
+        INTF_WIFI_LOGE(" %d : INVALID IPINFO", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -258,7 +261,7 @@ intf_wifi_Status_t intf_wifi_SetIpInfo(intf_wifi_IpInfo_t *pIpInfo)
 
         if (esp_netif_dhcps_stop(gIntfWifi.apNetif) != ESP_OK)
         {
-            INTF_WIFI_PRINT_ERR(" %d : FAILED TO STOP DHCPS", __LINE__);
+            INTF_WIFI_LOGE(" %d : FAILED TO STOP DHCPS", __LINE__);
             return INTF_WIFI_STATUS_ERROR;
         }
 
@@ -268,20 +271,20 @@ intf_wifi_Status_t intf_wifi_SetIpInfo(intf_wifi_IpInfo_t *pIpInfo)
 
         if (esp_netif_set_ip_info(gIntfWifi.apNetif, &ipInfo) != ESP_OK)
         {
-            INTF_WIFI_PRINT_ERR(" %d : FAILED TO SET IP INFO", __LINE__);
+            INTF_WIFI_LOGE(" %d : FAILED TO SET IP INFO", __LINE__);
             return INTF_WIFI_STATUS_ERROR;
         }
 
         if (esp_netif_dhcps_start(gIntfWifi.apNetif) != ESP_OK)
         {
-            INTF_WIFI_PRINT_ERR(" %d : FAILED TO START DHCPS", __LINE__);
+            INTF_WIFI_LOGE(" %d : FAILED TO START DHCPS", __LINE__);
             return INTF_WIFI_STATUS_ERROR;
         }
         return INTF_WIFI_STATUS_OK;
     }
     else
     {
-        INTF_WIFI_PRINT_ERR(" %d : MODE SHOULD BE INTF_WIFI_MODE_AP or INTF_WIFI_MODE_APSTA", __LINE__);
+        INTF_WIFI_LOGE(" %d : MODE SHOULD BE INTF_WIFI_MODE_AP or INTF_WIFI_MODE_APSTA", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 }
@@ -291,7 +294,7 @@ intf_wifi_Status_t intf_wifi_SetMode(intf_wifi_Mode_t mode)
 
     if (mode >= INTF_WIFI_MODE_MAX && mode <= INTF_WIFI_MODE_NULL)
     {
-        INTF_WIFI_PRINT_ERR(" %d : INVALID MODE", __LINE__);
+        INTF_WIFI_LOGE(" %d : INVALID MODE", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -302,7 +305,7 @@ intf_wifi_Status_t intf_wifi_SetMode(intf_wifi_Mode_t mode)
     }
     else
     {
-        INTF_WIFI_PRINT("WIFI MODE SET TO => \"%s\"", GetModeStr(mode));
+        INTF_WIFI_LOGI("WIFI MODE SET TO => \"%s\"", GetModeStr(mode));
         return INTF_WIFI_STATUS_OK;
     }
 }
@@ -312,13 +315,13 @@ intf_wifi_Status_t intf_wifi_SetCredentials(intf_wifi_Mode_t mode,
 {
     if (pCred == NULL)
     {
-        INTF_WIFI_PRINT_ERR(" %d : INVALID CREDENTIALS", __LINE__);
+        INTF_WIFI_LOGE(" %d : INVALID CREDENTIALS", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
     if (mode >= INTF_WIFI_MODE_MAX && mode <= INTF_WIFI_MODE_NULL)
     {
-        INTF_WIFI_PRINT_ERR(" %d : INVALID MODE", __LINE__);
+        INTF_WIFI_LOGE(" %d : INVALID MODE", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -338,12 +341,12 @@ intf_wifi_Status_t intf_wifi_SetCredentials(intf_wifi_Mode_t mode,
 
     if (ConfigureInterface(intf, pCred))
     {
-        INTF_WIFI_PRINT("\"%s\" CREDENTIALS SET", GetModeStr(mode));
+        INTF_WIFI_LOGI("\"%s\" CREDENTIALS SET", GetModeStr(mode));
         return INTF_WIFI_STATUS_OK;
     }
     else
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO CONFIGURE INTERFACE", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO CONFIGURE INTERFACE", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 }
@@ -353,7 +356,7 @@ intf_wifi_Status_t intf_wifi_Start(void)
 
     if (esp_wifi_start() != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO START WIFI", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO START WIFI", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -369,7 +372,7 @@ intf_wifi_Status_t intf_wifi_Stop(void)
 
     if (esp_wifi_stop() != ESP_OK)
     {
-        INTF_WIFI_PRINT_ERR(" %d : FAILED TO STOP WIFI", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO STOP WIFI", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 
@@ -383,22 +386,22 @@ bool intf_wifi_IsStaConnected(void)
 
 intf_wifi_Status_t intf_wifi_Connect(void)
 {
-    if (gIntfWifi.flags.staConn)
+    if (!gIntfWifi.flags.staConn)
     {
         if (esp_wifi_connect() != ESP_OK)
         {
-            INTF_WIFI_PRINT_ERR(" %d : FAILED TO CONNECT TO REMOTE AP", __LINE__);
-            return INTF_WIFI_STATUS_ERROR;
+            INTF_WIFI_LOGE(" %d : FAILED TO CONNECT TO AP", __LINE__);
         }
-        return INTF_WIFI_STATUS_OK;
+        else
+        {
+            return INTF_WIFI_STATUS_OK;
+        }
     }
     else
     {
-        INTF_WIFI_PRINT_ERR(" %d : DISCONNECT FIRST", __LINE__);
-        return INTF_WIFI_STATUS_ERROR;
+        INTF_WIFI_LOGE(" %d : CONNECTION PRESENT", __LINE__);
     }
-
-    return INTF_WIFI_STATUS_OK;
+    return INTF_WIFI_STATUS_ERROR;
 }
 
 intf_wifi_Status_t intf_wifi_Disconnect(void)
@@ -407,22 +410,29 @@ intf_wifi_Status_t intf_wifi_Disconnect(void)
     {
         if (esp_wifi_disconnect() != ESP_OK)
         {
-            INTF_WIFI_PRINT_ERR(" %d : FAILED TO DISCONNECT FROM REMOTE AP", __LINE__);
+            INTF_WIFI_LOGE(" %d : FAILED TO DISCONNECT FROM REMOTE AP", __LINE__);
             return INTF_WIFI_STATUS_ERROR;
         }
         return INTF_WIFI_STATUS_OK;
     }
     else
     {
-        INTF_WIFI_PRINT_ERR(" %d : NOT CONNECTED", __LINE__);
+        INTF_WIFI_LOGE(" %d : NOT CONNECTED", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 }
 
 intf_wifi_Status_t intf_wifi_StartScanning(void)
 {
-        esp_wifi_scan_start(NULL, true);
-
+    if (esp_wifi_scan_start(NULL, true) != ESP_OK)
+    {
+        INTF_WIFI_LOGE(" %d : FAILED TO SCAN", __LINE__);
+        return INTF_WIFI_STATUS_ERROR;
+    }
+    else
+    {
+        return INTF_WIFI_STATUS_OK;
+    }
 }
 
 __attribute__((__weak__)) void intf_wifi_EventCallback(intf_wifi_Event_t event,
@@ -441,41 +451,42 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         {
         // AP
         case WIFI_EVENT_AP_START:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_START");
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_START");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_AP_STARTED, &gIntfWifi.evtData);
             break;
         case WIFI_EVENT_AP_STOP:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_STOP");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STOP");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_AP_STOPED, &gIntfWifi.evtData);
             break;
         case WIFI_EVENT_AP_STACONNECTED:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_STACONNECTED");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STACONNECTED");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_CONNECTED, &gIntfWifi.evtData);
             break;
         case WIFI_EVENT_AP_STADISCONNECTED:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_AP_STADISCONNECTED");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STADISCONNECTED");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_DISCONNECTED, &gIntfWifi.evtData);
             break;
             // STA
         case WIFI_EVENT_STA_START:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_START");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_START");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_START, &gIntfWifi.evtData);
             break;
         case WIFI_EVENT_STA_STOP:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_STOP");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_STOP");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_STOP, &gIntfWifi.evtData);
             break;
         case WIFI_EVENT_STA_CONNECTED:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_CONNECTED");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_CONNECTED");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_CONNECTED, &gIntfWifi.evtData);
             break;
         case WIFI_EVENT_STA_DISCONNECTED:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_STA_DISCONNECTED");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_DISCONNECTED");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_DISCONNECTED, &gIntfWifi.evtData);
             break;
         // Scan
         case WIFI_EVENT_SCAN_DONE:
-            INTF_WIFI_PRINT("WIFI_EVENT => WIFI_EVENT_SCAN_DONE");
-
+            INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_SCAN_DONE");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_COMPLETE, &gIntfWifi.evtData);
             break;
         default:
             // ignored events
@@ -488,17 +499,17 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         {
         // AP
         case IP_EVENT_AP_STAIPASSIGNED:
-            INTF_WIFI_PRINT("IP_EVENT => IP_EVENT_AP_STAIPASSIGNED");
-
+            INTF_WIFI_LOGD("IP_EVENT => IP_EVENT_AP_STAIPASSIGNED");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_GOT_IP, &gIntfWifi.evtData);
             break;
         // STA
         case IP_EVENT_STA_GOT_IP:
-            INTF_WIFI_PRINT("IP_EVENT => IP_EVENT_STA_GOT_IP");
-
+            INTF_WIFI_LOGD("IP_EVENT => IP_EVENT_STA_GOT_IP");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_GOT_IP, &gIntfWifi.evtData);
             break;
         case IP_EVENT_STA_LOST_IP:
-            INTF_WIFI_PRINT("IP_EVENT => IP_EVENT_STA_LOST_IP");
-
+            INTF_WIFI_LOGD("IP_EVENT => IP_EVENT_STA_LOST_IP");
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_LOST_IP, &gIntfWifi.evtData);
             break;
         default:
             // ignored events
