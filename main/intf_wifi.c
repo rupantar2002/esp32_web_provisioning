@@ -1,4 +1,8 @@
 #include <string.h>
+#include <stdlib.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 #include <esp_mac.h>
 #include <esp_event.h>
 #include <esp_wifi.h>
@@ -29,6 +33,17 @@ typedef struct
     esp_netif_t *staNetif;
     intf_wifi_Event_t evt;
     intf_wifi_EventData_t evtData;
+#if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
+#if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_STATIC)
+    wifi_ap_record_t apRecordList[INTF_WIFI_SCAN_LIST_MAX_LENGTH];
+    uint16_t apRecordCount;
+#else
+    wifi_ap_record_t *apRecordList;
+    uint16_t apRecordCount;
+    uint16_t apCount;
+#endif // INTF_WIFI_SCAN_LIST_ALLOC_TYPE
+#endif // INTF_WIFI_SCAN_STATE
+
 } intf_wifi_Ctx_t;
 
 static const char *TAG = "INTF_WIFI";
@@ -93,6 +108,64 @@ static bool SetWifiMode(void)
     {
         return true;
     }
+}
+
+static bool CopyListToBuff(uint16_t count)
+{
+    uint8_t success = false;
+#if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
+#if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_STATIC)
+
+    /* clear buffer */
+    (void)memset(gIntfWifi.apRecordList, '\0', sizeof(gIntfWifi.apRecordList));
+
+    if (count > INTF_WIFI_SCAN_LIST_MAX_LENGTH)
+    {
+        count = INTF_WIFI_SCAN_LIST_MAX_LENGTH;
+    }
+
+    if (esp_wifi_scan_get_ap_records(&count,
+                                     gIntfWifi.apRecordList) != ESP_OK)
+    {
+        INTF_WIFI_LOGE(" %d : FAILED TO READ RECORDS", __LINE__);
+    }
+    else
+    {
+        success = true; /* set flag*/
+    }
+
+#else
+
+    if (gIntfWifi.apRecordList)
+    {
+
+        /* clear buffer */
+        (void)memset(gIntfWifi.apRecordList, '\0', gIntfWifi.apCount);
+
+        if (count > gIntfWifi.apCount)
+        {
+            count = gIntfWifi.apCount;
+        }
+
+        if (esp_wifi_scan_get_ap_records(&count,
+                                         gIntfWifi.apRecordList) != ESP_OK)
+        {
+            INTF_WIFI_LOGE(" %d : FAILED TO READ RECORDS", __LINE__);
+        }
+        else
+        {
+            success = true; /* set flag*/
+        }
+    }
+    else
+    {
+        INTF_WIFI_LOGE(" %d : RECORD LIST NOT FOUND", __LINE__);
+    }
+
+#endif // INTF_WIFI_SCAN_LIST_ALLOC_TYPE
+#endif // INTF_WIFI_SCAN_STATE
+    gIntfWifi.apRecordCount = count;
+    return success;
 }
 
 /* Initialize soft AP */
@@ -265,9 +338,12 @@ intf_wifi_Status_t intf_wifi_SetIpInfo(intf_wifi_IpInfo_t *pIpInfo)
             return INTF_WIFI_STATUS_ERROR;
         }
 
-        ipInfo.ip.addr = ESP_IP4TOADDR(pIpInfo->ip[0], pIpInfo->ip[1], pIpInfo->ip[2], pIpInfo->ip[3]);
-        ipInfo.netmask.addr = ESP_IP4TOADDR(pIpInfo->netmask[0], pIpInfo->netmask[1], pIpInfo->netmask[2], pIpInfo->netmask[3]);
-        ipInfo.gw.addr = ESP_IP4TOADDR(pIpInfo->getway[0], pIpInfo->getway[1], pIpInfo->getway[2], pIpInfo->getway[3]);
+        ipInfo.ip.addr = ESP_IP4TOADDR(pIpInfo->ip[0], pIpInfo->ip[1],
+                                       pIpInfo->ip[2], pIpInfo->ip[3]);
+        ipInfo.netmask.addr = ESP_IP4TOADDR(pIpInfo->netmask[0], pIpInfo->netmask[1],
+                                            pIpInfo->netmask[2], pIpInfo->netmask[3]);
+        ipInfo.gw.addr = ESP_IP4TOADDR(pIpInfo->getway[0], pIpInfo->getway[1],
+                                       pIpInfo->getway[2], pIpInfo->getway[3]);
 
         if (esp_netif_set_ip_info(gIntfWifi.apNetif, &ipInfo) != ESP_OK)
         {
@@ -422,11 +498,14 @@ intf_wifi_Status_t intf_wifi_Disconnect(void)
     }
 }
 
-intf_wifi_Status_t intf_wifi_StartScanning(void)
+#if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
+
+intf_wifi_Status_t intf_wifi_StartScanning(bool block)
 {
-    if (esp_wifi_scan_start(NULL, true) != ESP_OK)
+
+    if (esp_wifi_scan_start(NULL, block) != ESP_OK) // TODO scanning params
     {
-        INTF_WIFI_LOGE(" %d : FAILED TO SCAN", __LINE__);
+        INTF_WIFI_LOGE(" %d : FAILED TO START SCANNING", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
     else
@@ -434,6 +513,83 @@ intf_wifi_Status_t intf_wifi_StartScanning(void)
         return INTF_WIFI_STATUS_OK;
     }
 }
+
+intf_wifi_Status_t intf_wifi_StopScanning(void)
+{
+    if (esp_wifi_scan_stop() != ESP_OK)
+    {
+        INTF_WIFI_LOGE(" %d : FAILED TO STOP SCANNING", __LINE__);
+        return INTF_WIFI_STATUS_ERROR;
+    }
+    else
+    {
+        return INTF_WIFI_STATUS_OK;
+    }
+}
+
+intf_wifi_Status_t intf_wifi_GetScanList(const intf_wifi_ApRecord_t **records,
+                                         uint16_t *count)
+{
+    if (records == NULL || count == NULL)
+    {
+        return INTF_WIFI_STATUS_ERROR;
+    }
+
+    if (gIntfWifi.apRecordCount > 0 && gIntfWifi.apRecordList)
+    {
+        *records = (intf_wifi_ApRecord_t *)gIntfWifi.apRecordList;
+        *count = gIntfWifi.apRecordCount;
+        return INTF_WIFI_STATUS_OK;
+    }
+    else
+    {
+        INTF_WIFI_LOGE(" %d : LIST IS EMPTY or NOT CREATED", __LINE__);
+        return INTF_WIFI_STATUS_ERROR;
+    }
+}
+
+#if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC)
+
+intf_wifi_Status_t intf_wifi_CreateScanList(size_t count)
+{
+    if (count > 0)
+    {
+        if (gIntfWifi.apRecordList == NULL)
+        {
+            gIntfWifi.apRecordList = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * count);
+            if (gIntfWifi.apRecordList != NULL)
+            {
+                gIntfWifi.apCount = count;
+                INTF_WIFI_LOGI("LIST CREATED");
+                return INTF_WIFI_STATUS_OK;
+            }
+            else
+            {
+                gIntfWifi.apRecordList = NULL;
+                gIntfWifi.apCount = 0;
+            }
+        }
+        else
+        {
+            INTF_WIFI_LOGE(" %d : LIST EXISTS", __LINE__);
+        }
+    }
+
+    return INTF_WIFI_STATUS_ERROR;
+}
+
+void intf_wifi_DestroyScanList(void)
+{
+    if (gIntfWifi.apRecordList)
+    {
+        free(gIntfWifi.apRecordList);
+        gIntfWifi.apRecordList = NULL;
+        gIntfWifi.apCount = 0;
+    }
+}
+
+#endif // INTF_WIFI_SCAN_LIST_ALLOC_TYPE
+#endif // INTF_WIFI_SCAN_STATE
 
 __attribute__((__weak__)) void intf_wifi_EventCallback(intf_wifi_Event_t event,
                                                        intf_wifi_EventData_t const *const pData)
@@ -451,43 +607,83 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         {
         // AP
         case WIFI_EVENT_AP_START:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_START");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_AP_STARTED, &gIntfWifi.evtData);
             break;
+        }
         case WIFI_EVENT_AP_STOP:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STOP");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_AP_STOPED, &gIntfWifi.evtData);
             break;
+        }
         case WIFI_EVENT_AP_STACONNECTED:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STACONNECTED");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_CONNECTED, &gIntfWifi.evtData);
             break;
+        }
         case WIFI_EVENT_AP_STADISCONNECTED:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STADISCONNECTED");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_DISCONNECTED, &gIntfWifi.evtData);
             break;
+        }
             // STA
         case WIFI_EVENT_STA_START:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_START");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_START, &gIntfWifi.evtData);
             break;
+        }
         case WIFI_EVENT_STA_STOP:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_STOP");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_STOP, &gIntfWifi.evtData);
             break;
+        }
         case WIFI_EVENT_STA_CONNECTED:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_CONNECTED");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_CONNECTED, &gIntfWifi.evtData);
             break;
+        }
         case WIFI_EVENT_STA_DISCONNECTED:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_DISCONNECTED");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_DISCONNECTED, &gIntfWifi.evtData);
             break;
+        }
         // Scan
         case WIFI_EVENT_SCAN_DONE:
+        {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_SCAN_DONE");
-            intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_COMPLETE, &gIntfWifi.evtData);
+            wifi_event_sta_scan_done_t *evt = (wifi_event_sta_scan_done_t *)event_data;
+
+            INTF_WIFI_LOGD("status : %d ", (int)evt->status);
+            INTF_WIFI_LOGD("number : %d ", evt->number);
+            INTF_WIFI_LOGD("scan_id : %d ", evt->scan_id);
+
+            uint8_t success = CopyListToBuff(evt->number);
+            if (success && evt->status == 0) /* only call if successful*/
+            {
+                for (int i = 0; i < evt->number; i++) // TODO remove
+                {
+                    INTF_WIFI_LOGD("\n");
+                    INTF_WIFI_LOGD("ssid : \"%s\"", gIntfWifi.apRecordList[i].ssid);
+                    INTF_WIFI_LOGD("rssi : %d", gIntfWifi.apRecordList[i].rssi);
+                    INTF_WIFI_LOGD("primary : %d", gIntfWifi.apRecordList[i].primary);
+                    INTF_WIFI_LOGD("wps : %d", gIntfWifi.apRecordList[i].wps);
+                }
+
+                /* scan event */
+                gIntfWifi.evtData.scanComplete.records = (intf_wifi_ApRecord_t *)gIntfWifi.apRecordList;
+                gIntfWifi.evtData.scanComplete.count = gIntfWifi.apRecordCount;
+                intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_COMPLETE, &gIntfWifi.evtData);
+            }
             break;
+        }
         default:
             // ignored events
             break;
@@ -520,29 +716,4 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
     {
         // not used
     }
-
-    // if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
-    // {
-    //     wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
-    //     ESP_LOGI(TAG, "Station " MACSTR " joined, AID=%d",
-    //              MAC2STR(event->mac), event->aid);
-    // }
-    // else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED)
-    // {
-    //     wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
-    //     ESP_LOGI(TAG, "Station " MACSTR " left, AID=%d",
-    //              MAC2STR(event->mac), event->aid);
-    // }
-    // else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
-    // {
-    //     esp_wifi_connect();
-    //     ESP_LOGI(TAG, "Station started");
-    // }
-    // else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
-    // {
-    //     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-    //     ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
-    //     // s_retry_num = 0;
-    //     // xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    // }
 }
