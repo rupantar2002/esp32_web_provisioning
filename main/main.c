@@ -24,6 +24,35 @@
 
 static const char *TAG = "MAIN";
 
+static void Scan(bool block)
+{
+    if (intf_wifi_StartScanning(block) == INTF_WIFI_STATUS_OK)
+    {
+        ESP_LOGI(TAG, "SCAN DONE");
+        const intf_wifi_ApRecord_t *apList = NULL; // This will hold the list of APs
+        uint16_t apCount = 0;                      // This will hold the number of APs
+
+        // Call the function to get the scan list
+        intf_wifi_Status_t status = intf_wifi_GetScanList(&apList, &apCount);
+
+        // Check if the scan was successful
+        if (status == INTF_WIFI_STATUS_OK)
+        {
+            ESP_LOGI(TAG, "Number of APs found: %u", apCount);
+
+            // Loop through and print each AP's info
+            for (uint16_t i = 0; i < apCount; i++)
+            {
+                ESP_LOGI(TAG, "AP %u :{ ssid : \"%s\", rssi: %d }", i, apList[i].ssid, apList[i].rssi);
+            }
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to get the AP list.");
+        }
+    }
+}
+
 void app_main(void)
 {
     // Initialize NVS
@@ -51,8 +80,6 @@ void app_main(void)
 
     intf_wifi_Init();
 
-    intf_wifi_CreateScanList(10U);
-
     intf_wifi_SetMode(INTF_WIFI_MODE_APSTA);
 
     // intf_wifi_SetIpInfo(&ipInfo);
@@ -63,59 +90,35 @@ void app_main(void)
 
     // intf_wifi_Connect();
 
-    if (intf_wifi_StartScanning(true) == INTF_WIFI_STATUS_OK)
-    {
-        ESP_LOGI(TAG, "SCAN DONE");
-        const intf_wifi_ApRecord_t *apList = NULL; // This will hold the list of APs
-        uint16_t apCount = 0;                      // This will hold the number of APs
+    Scan(false);
 
-        // Call the function to get the scan list
-        intf_wifi_Status_t status = intf_wifi_GetScanList(&apList, &apCount);
+    Scan(true);
 
-        // Check if the scan was successful
-        if (status == INTF_WIFI_STATUS_OK)
-        {
-            ESP_LOGI(TAG, "Number of APs found: %u", apCount);
+    // if (intf_wifi_StartScanning(true) == INTF_WIFI_STATUS_OK)
+    // {
+    //     ESP_LOGI(TAG, "SCAN DONE");
+    //     const intf_wifi_ApRecord_t *apList = NULL; // This will hold the list of APs
+    //     uint16_t apCount = 0;                      // This will hold the number of APs
 
-            // Loop through and print each AP's info
-            for (uint16_t i = 0; i < apCount; i++)
-            {
-                ESP_LOGI(TAG, "AP %u :{ ssid : \"%s\", rssi: %d }", i, apList[i].ssid, apList[i].rssi);
-            }
-        }
-        else
-        {
-            ESP_LOGE(TAG, "Failed to get the AP list.");
-        }
-    }
+    //     // Call the function to get the scan list
+    //     intf_wifi_Status_t status = intf_wifi_GetScanList(&apList, &apCount);
 
-    intf_wifi_DestroyScanList();
+    //     // Check if the scan was successful
+    //     if (status == INTF_WIFI_STATUS_OK)
+    //     {
+    //         ESP_LOGI(TAG, "Number of APs found: %u", apCount);
 
-    if (intf_wifi_StartScanning(true) == INTF_WIFI_STATUS_OK)
-    {
-        ESP_LOGI(TAG, "SCAN DONE");
-        const intf_wifi_ApRecord_t *apList = NULL; // This will hold the list of APs
-        uint16_t apCount = 0;                      // This will hold the number of APs
-
-        // Call the function to get the scan list
-        intf_wifi_Status_t status = intf_wifi_GetScanList(&apList, &apCount);
-
-        // Check if the scan was successful
-        if (status == INTF_WIFI_STATUS_OK)
-        {
-            ESP_LOGI(TAG, "Number of APs found: %u", apCount);
-
-            // Loop through and print each AP's info
-            for (uint16_t i = 0; i < apCount; i++)
-            {
-                ESP_LOGI(TAG, "AP %u :{ ssid : \"%s\", rssi: %d }", i, apList[i].ssid, apList[i].rssi);
-            }
-        }
-        else
-        {
-            ESP_LOGE(TAG, "Failed to get the AP list.");
-        }
-    }
+    //         // Loop through and print each AP's info
+    //         for (uint16_t i = 0; i < apCount; i++)
+    //         {
+    //             ESP_LOGI(TAG, "AP %u :{ ssid : \"%s\", rssi: %d }", i, apList[i].ssid, apList[i].rssi);
+    //         }
+    //     }
+    //     else
+    //     {
+    //         ESP_LOGE(TAG, "Failed to get the AP list.");
+    //     }
+    // }
 }
 
 void intf_wifi_EventCallback(intf_wifi_Event_t event,
@@ -150,18 +153,34 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         break;
     case INTF_WIFI_EVENT_STA_LOST_IP:
         break;
-    case INTF_WIFI_EVENT_SCAN_COMPLETE:
-        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_SCAN_COMPLETE", __LINE__, __func__);
-        ESP_LOGI(TAG, "count : %d", pData->scanComplete.count);
-        for (int i = 0; i < pData->scanComplete.count; i++) // TODO remove
+
+    case INTF_WIFI_EVENT_SCAN_DONE:
+        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_SCAN_DONE", __LINE__, __func__);
+        ESP_LOGI(TAG, "status : %d", pData->scanDone.status);
+        ESP_LOGI(TAG, "Aps found : %d", pData->scanDone.count);
+
+        if (pData->scanDone.status)
         {
-            ESP_LOGI(TAG, "\n");
-            ESP_LOGI(TAG, "ssid : \"%s\"", pData->scanComplete.records[i].ssid);
-            ESP_LOGI(TAG, "rssi : %d", pData->scanComplete.records[i].rssi);
-            ESP_LOGI(TAG, "primary : %d", pData->scanComplete.records[i].primary);
-            ESP_LOGI(TAG, "wps : %d", pData->scanComplete.records[i].wps);
+            intf_wifi_CreateScanList(pData->scanDone.count);
         }
         break;
+    case INTF_WIFI_EVENT_SCAN_LIST:
+        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_SCAN_LIST", __LINE__, __func__);
+        if (pData->scanList.count > 0)
+        {
+            for (uint16_t i = 0; i < pData->scanList.count; i++) // TODO remove
+            {
+                ESP_LOGI(TAG, "\n");
+                ESP_LOGI(TAG, "ssid : \"%s\"", pData->scanList.records[i].ssid);
+                ESP_LOGI(TAG, "rssi : %d", pData->scanList.records[i].rssi);
+                ESP_LOGI(TAG, "primary : %d", pData->scanList.records[i].primary);
+                ESP_LOGI(TAG, "wps : %d", pData->scanList.records[i].wps);
+                ESP_LOGI(TAG, "\n");
+            }
+        }
+        intf_wifi_DestroyScanList();
+        break;
+
     case INTF_WIFI_EVENT_MAX:
         break;
     default:

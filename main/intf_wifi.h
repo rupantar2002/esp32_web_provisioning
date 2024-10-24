@@ -118,7 +118,9 @@ typedef enum
     INTF_WIFI_EVENT_STA_DISCONNECTED,
     INTF_WIFI_EVENT_STA_GOT_IP,
     INTF_WIFI_EVENT_STA_LOST_IP,
-    INTF_WIFI_EVENT_SCAN_COMPLETE,
+    // scan
+    INTF_WIFI_EVENT_SCAN_DONE,
+    INTF_WIFI_EVENT_SCAN_LIST,
     INTF_WIFI_EVENT_MAX,
 } intf_wifi_Event_t;
 
@@ -169,9 +171,15 @@ typedef struct
     /* Scanning Events*/
     struct
     {
+        bool status;
+        uint16_t count;
+    } scanDone;
+
+    struct
+    {
         uint16_t count;
         intf_wifi_ApRecord_t *records;
-    } scanComplete;
+    } scanList;
 
 } intf_wifi_EventData_t;
 
@@ -207,7 +215,7 @@ intf_wifi_Status_t intf_wifi_GetScanList(const intf_wifi_ApRecord_t **records,
 
 #if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC)
 
-intf_wifi_Status_t intf_wifi_CreateScanList(size_t count);
+intf_wifi_Status_t intf_wifi_CreateScanList(uint16_t count);
 
 void intf_wifi_DestroyScanList(void);
 

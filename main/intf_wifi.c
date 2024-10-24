@@ -159,7 +159,7 @@ static bool CopyListToBuff(uint16_t count)
     }
     else
     {
-        INTF_WIFI_LOGE(" %d : RECORD LIST NOT FOUND", __LINE__);
+        INTF_WIFI_LOGE(" %d : NO LIST FOUND", __LINE__);
     }
 
 #endif // INTF_WIFI_SCAN_LIST_ALLOC_TYPE
@@ -435,8 +435,10 @@ intf_wifi_Status_t intf_wifi_Start(void)
         INTF_WIFI_LOGE(" %d : FAILED TO START WIFI", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
-
-    return INTF_WIFI_STATUS_OK;
+    else
+    {
+        return INTF_WIFI_STATUS_OK;
+    }
 }
 
 intf_wifi_Status_t intf_wifi_Stop(void)
@@ -535,7 +537,13 @@ intf_wifi_Status_t intf_wifi_GetScanList(const intf_wifi_ApRecord_t **records,
         return INTF_WIFI_STATUS_ERROR;
     }
 
-    if (gIntfWifi.apRecordCount > 0 && gIntfWifi.apRecordList)
+    if (gIntfWifi.apRecordList == NULL)
+    {
+        INTF_WIFI_LOGE(" %d : NO LIST FOUND", __LINE__);
+        return INTF_WIFI_STATUS_ERROR;
+    }
+
+    if (gIntfWifi.apRecordCount)
     {
         *records = (intf_wifi_ApRecord_t *)gIntfWifi.apRecordList;
         *count = gIntfWifi.apRecordCount;
@@ -543,14 +551,14 @@ intf_wifi_Status_t intf_wifi_GetScanList(const intf_wifi_ApRecord_t **records,
     }
     else
     {
-        INTF_WIFI_LOGE(" %d : LIST IS EMPTY or NOT CREATED", __LINE__);
+        INTF_WIFI_LOGE(" %d : LIST EMPTY", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
 }
 
 #if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC)
 
-intf_wifi_Status_t intf_wifi_CreateScanList(size_t count)
+intf_wifi_Status_t intf_wifi_CreateScanList(uint16_t count)
 {
     if (count > 0)
     {
@@ -665,8 +673,13 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
             INTF_WIFI_LOGD("number : %d ", evt->number);
             INTF_WIFI_LOGD("scan_id : %d ", evt->scan_id);
 
+            /* scan event */
+            gIntfWifi.evtData.scanDone.status = !evt->status; /* as 0 value means success */
+            gIntfWifi.evtData.scanDone.count = (evt->status == 0) ? evt->number : 0U;
+            intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_DONE, &gIntfWifi.evtData);
+
             uint8_t success = CopyListToBuff(evt->number);
-            if (success && evt->status == 0) /* only call if successful*/
+            if (success && (evt->status == 0)) /* only call if successful*/
             {
                 for (int i = 0; i < evt->number; i++) // TODO remove
                 {
@@ -675,12 +688,13 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
                     INTF_WIFI_LOGD("rssi : %d", gIntfWifi.apRecordList[i].rssi);
                     INTF_WIFI_LOGD("primary : %d", gIntfWifi.apRecordList[i].primary);
                     INTF_WIFI_LOGD("wps : %d", gIntfWifi.apRecordList[i].wps);
+                    INTF_WIFI_LOGD("\n");
                 }
 
                 /* scan event */
-                gIntfWifi.evtData.scanComplete.records = (intf_wifi_ApRecord_t *)gIntfWifi.apRecordList;
-                gIntfWifi.evtData.scanComplete.count = gIntfWifi.apRecordCount;
-                intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_COMPLETE, &gIntfWifi.evtData);
+                gIntfWifi.evtData.scanList.records = (intf_wifi_ApRecord_t *)gIntfWifi.apRecordList;
+                gIntfWifi.evtData.scanList.count = gIntfWifi.apRecordCount;
+                intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_LIST, &gIntfWifi.evtData);
             }
             break;
         }
