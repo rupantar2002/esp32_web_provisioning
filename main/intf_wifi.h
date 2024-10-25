@@ -27,15 +27,15 @@
 
 #define INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC 1 /* Runtime alocated scanlist */
 
-#define INTF_WIFI_SCAN_LIST_ALLOC_TYPE INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC /* Runtime alocated scanlist */
+#define INTF_WIFI_SCAN_LIST_ALLOC_TYPE INTF_WIFI_SCAN_LIST_ALLOC_STATIC /* Runtime alocated scanlist */
 
 #if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_STATIC) /* Select scanlist type */
 
 #define INTF_WIFI_SCAN_LIST_MAX_LENGTH 10 /* Select scanlist max length */
 
-#endif
+#endif // INTF_WIFI_SCAN_LIST_ALLOC_TYPE
 
-#endif
+#endif // INTF_WIFI_SCAN_STATE
 
 enum intf_wifi_Status
 {
@@ -52,6 +52,25 @@ enum intf_wifi_Mode
     INTF_WIFI_MODE_APSTA,
     INTF_WIFI_MODE_MAX,
 };
+
+typedef enum
+{
+    INTF_WIFI_AUTH_OPEN = 0,
+    INTF_WIFI_AUTH_WEP,
+    INTF_WIFI_AUTH_WPA_PSK,
+    INTF_WIFI_AUTH_WPA2_PSK,
+    INTF_WIFI_AUTH_WPA_WPA2_PSK,
+    INTF_WIFI_AUTH_ENTERPRISE,
+    INTF_WIFI_AUTH_WPA2_ENTERPRISE = INTF_WIFI_AUTH_ENTERPRISE,
+    INTF_WIFI_AUTH_WPA3_PSK,
+    INTF_WIFI_AUTH_WPA2_WPA3_PSK,
+    INTF_WIFI_AUTH_WAPI_PSK,
+    INTF_WIFI_AUTH_OWE,
+    INTF_WIFI_AUTH_WPA3_ENT_192,
+    INTF_WIFI_AUTH_WPA3_EXT_PSK,
+    INTF_WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE,
+    INTF_WIFI_AUTH_MAX
+} intf_wifi_AuthMode_t;
 
 typedef uint8_t intf_wifi_Status_t;
 
@@ -107,11 +126,13 @@ typedef struct // TODO update accordingly
 typedef enum
 {
     INTF_WIFI_EVENT_NLL = 0,
+    // Ap
     INTF_WIFI_EVENT_AP_STARTED,
     INTF_WIFI_EVENT_AP_STOPED,
     INTF_WIFI_EVENT_APSTA_CONNECTED,
     INTF_WIFI_EVENT_APSTA_DISCONNECTED,
     INTF_WIFI_EVENT_APSTA_GOT_IP,
+    // Sta
     INTF_WIFI_EVENT_STA_START,
     INTF_WIFI_EVENT_STA_STOP,
     INTF_WIFI_EVENT_STA_CONNECTED,
@@ -124,49 +145,52 @@ typedef enum
     INTF_WIFI_EVENT_MAX,
 } intf_wifi_Event_t;
 
-typedef struct
+typedef union
 {
-    /* Access Point Events */
-    struct
-    {
-        uint32_t reserved;
-    } apStarted;
+    /* Ap Events */
 
     struct
     {
-        uint32_t reserved;
-    } apStoped;
-
-    struct
-    {
-        uint32_t reserved;
+        uint8_t mac[6]; /**< MAC address of the station connected to Soft-AP */
+        uint8_t aid;    /**< the aid that soft-AP gives to the station connected to  */
     } apStaConnected;
 
     struct
     {
-        uint32_t reserved;
+        uint8_t mac[6]; /**< MAC address of the station disconnects to soft-AP */
+        uint8_t aid;    /**< the aid that soft-AP gave to the station disconnects to  */
+        uint8_t reason; /**< reason of disconnection */
     } apStaDisconnected;
+
+    struct
+    {
+        uint8_t ip[4];  /*!< IP address which was assigned to the station */
+        uint8_t mac[6]; /*!< MAC address of the connected client */
+    } apStaGotIp;
 
     /* Station Events */
     struct
     {
-        uint32_t reserved;
-    } staStarted;
-
-    struct
-    {
-        uint32_t reserved;
-    } staStoped;
-
-    struct
-    {
-        uint32_t reserved;
+        uint8_t ssid[INTF_WIFI_SSID_LEN + 2]; /**< SSID of connected AP */
+        uint8_t ssidLen;                      /**< SSID length of connected AP */
+        uint8_t bssid[6];                     /**< BSSID of connected AP*/
+        intf_wifi_AuthMode_t authMode;        /**< authentication mode used by AP*/
+        uint16_t aid;                         /**< authentication id assigned by the connected AP */
     } staConnected;
 
     struct
     {
-        uint32_t reserved;
+        uint8_t ssid[INTF_WIFI_SSID_LEN + 2]; /**< SSID of disconnected AP */
+        uint8_t ssidLen;                      /**< SSID length of disconnected AP */
+        uint8_t bssid[6];                     /**< BSSID of disconnected AP */
+        uint8_t reason;                       /**< reason of disconnection */
     } staDisconnected;
+
+    struct
+    {
+        intf_wifi_IpInfo_t ipInfo; /*!< IP address, netmask, gatway IP address */
+        bool changed;            /*!< Whether the assigned IP has changed or not */
+    } staGotIp;
 
     /* Scanning Events*/
     struct

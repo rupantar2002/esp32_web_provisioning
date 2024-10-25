@@ -110,6 +110,14 @@ static bool SetWifiMode(void)
     }
 }
 
+void IpToBytes(esp_ip4_addr_t ip, uint8_t *bytes)
+{
+    bytes[0] = (ip.addr >> 24) & 0xFF; /* Extract the first byte */
+    bytes[1] = (ip.addr >> 16) & 0xFF; /* Extract the second byte */
+    bytes[2] = (ip.addr >> 8) & 0xFF;  /* Extract the third byte */
+    bytes[3] = ip.addr & 0xFF;         /* Extract the fourth byte */
+}
+
 static bool CopyListToBuff(uint16_t count)
 {
     uint8_t success = false;
@@ -609,6 +617,9 @@ __attribute__((__weak__)) void intf_wifi_EventCallback(intf_wifi_Event_t event,
 static void WifiEventHandler(void *arg, esp_event_base_t event_base,
                              int32_t event_id, void *event_data)
 {
+    /* clears event data */
+    (void)memset(&gIntfWifi.evtData, 0, sizeof(&gIntfWifi.evtData));
+
     if (event_base == WIFI_EVENT)
     {
         switch (event_id)
@@ -629,12 +640,23 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         case WIFI_EVENT_AP_STACONNECTED:
         {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STACONNECTED");
+            wifi_event_ap_staconnected_t *evt = (wifi_event_ap_staconnected_t *)event_data;
+
+            (void)memcpy(gIntfWifi.evtData.apStaConnected.mac, evt->mac, sizeof(evt->mac));
+            gIntfWifi.evtData.apStaConnected.aid = evt->aid;
+
             intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_CONNECTED, &gIntfWifi.evtData);
             break;
         }
         case WIFI_EVENT_AP_STADISCONNECTED:
         {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_AP_STADISCONNECTED");
+            wifi_event_ap_stadisconnected_t *evt = (wifi_event_ap_stadisconnected_t *)event_data;
+
+            (void)memcpy(gIntfWifi.evtData.apStaDisconnected.mac, evt->mac, sizeof(evt->mac));
+            gIntfWifi.evtData.apStaDisconnected.aid = evt->aid;
+            gIntfWifi.evtData.apStaDisconnected.reason = evt->reason;
+
             intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_DISCONNECTED, &gIntfWifi.evtData);
             break;
         }
@@ -642,6 +664,9 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         case WIFI_EVENT_STA_START:
         {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_START");
+
+            wifi_event_sta_connected_t *evt = (wifi_event_sta_connected_t *)event_data;
+
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_START, &gIntfWifi.evtData);
             break;
         }
@@ -654,12 +679,27 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         case WIFI_EVENT_STA_CONNECTED:
         {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_CONNECTED");
+            wifi_event_sta_connected_t *evt = (wifi_event_sta_connected_t *)event_data;
+
+            (void)memcpy(gIntfWifi.evtData.staConnected.ssid, evt->ssid, evt->ssid_len);
+            (void)memcpy(gIntfWifi.evtData.staConnected.bssid, evt->bssid, sizeof(evt->bssid));
+            gIntfWifi.evtData.staConnected.ssidLen = evt->ssid_len;
+            gIntfWifi.evtData.staConnected.authMode = evt->authmode;
+            gIntfWifi.evtData.staConnected.aid = evt->aid;
+
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_CONNECTED, &gIntfWifi.evtData);
             break;
         }
         case WIFI_EVENT_STA_DISCONNECTED:
         {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_DISCONNECTED");
+            wifi_event_sta_disconnected_t *evt = (wifi_event_sta_disconnected_t *)event_data;
+
+            (void)memcpy(gIntfWifi.evtData.staDisconnected.ssid, evt->ssid, evt->ssid_len);
+            (void)memcpy(gIntfWifi.evtData.staDisconnected.bssid, evt->bssid, sizeof(evt->bssid));
+            gIntfWifi.evtData.staDisconnected.ssidLen = evt->ssid_len;
+            gIntfWifi.evtData.staDisconnected.reason = evt->reason;
+
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_DISCONNECTED, &gIntfWifi.evtData);
             break;
         }
@@ -709,18 +749,36 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         {
         // AP
         case IP_EVENT_AP_STAIPASSIGNED:
+        {
             INTF_WIFI_LOGD("IP_EVENT => IP_EVENT_AP_STAIPASSIGNED");
+            ip_event_ap_staipassigned_t *evt = (ip_event_ap_staipassigned_t *)event_data;
+
+            (void)memcpy(gIntfWifi.evtData.apStaGotIp.mac, evt->mac, sizeof(evt->mac));
+            IpToBytes(evt->ip, gIntfWifi.evtData.apStaGotIp.ip);
+
             intf_wifi_EventCallback(INTF_WIFI_EVENT_APSTA_GOT_IP, &gIntfWifi.evtData);
             break;
+        }
         // STA
         case IP_EVENT_STA_GOT_IP:
+        {
             INTF_WIFI_LOGD("IP_EVENT => IP_EVENT_STA_GOT_IP");
+
+            ip_event_got_ip_t *evt = (ip_event_got_ip_t *)event_data;
+            IpToBytes(evt->ip_info.ip, gIntfWifi.evtData.staGotIp.ipInfo.ip);
+            IpToBytes(evt->ip_info.gw, gIntfWifi.evtData.staGotIp.ipInfo.getway);
+            IpToBytes(evt->ip_info.netmask, gIntfWifi.evtData.staGotIp.ipInfo.netmask);
+            gIntfWifi.evtData.staGotIp.changed = evt->ip_changed;
+
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_GOT_IP, &gIntfWifi.evtData);
             break;
+        }
         case IP_EVENT_STA_LOST_IP:
+        {
             INTF_WIFI_LOGD("IP_EVENT => IP_EVENT_STA_LOST_IP");
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_LOST_IP, &gIntfWifi.evtData);
             break;
+        }
         default:
             // ignored events
             break;
