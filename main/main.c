@@ -24,9 +24,45 @@
 
 static const char *TAG = "MAIN";
 
+const char *GetAuthModeName(intf_wifi_AuthMode_t mode)
+{
+    switch (mode)
+    {
+    case INTF_WIFI_AUTH_OPEN:
+        return "INTF_WIFI_AUTH_OPEN";
+    case INTF_WIFI_AUTH_WEP:
+        return "INTF_WIFI_AUTH_WEP";
+    case INTF_WIFI_AUTH_WPA_PSK:
+        return "INTF_WIFI_AUTH_WPA_PSK";
+    case INTF_WIFI_AUTH_WPA2_PSK:
+        return "INTF_WIFI_AUTH_WPA2_PSK";
+    case INTF_WIFI_AUTH_WPA_WPA2_PSK:
+        return "INTF_WIFI_AUTH_WPA_WPA2_PSK";
+    case INTF_WIFI_AUTH_ENTERPRISE:
+        return "INTF_WIFI_AUTH_ENTERPRISE";
+    case INTF_WIFI_AUTH_WPA3_PSK:
+        return "INTF_WIFI_AUTH_WPA3_PSK";
+    case INTF_WIFI_AUTH_WPA2_WPA3_PSK:
+        return "INTF_WIFI_AUTH_WPA2_WPA3_PSK";
+    case INTF_WIFI_AUTH_WAPI_PSK:
+        return "INTF_WIFI_AUTH_WAPI_PSK";
+    case INTF_WIFI_AUTH_OWE:
+        return "INTF_WIFI_AUTH_OWE";
+    case INTF_WIFI_AUTH_WPA3_ENT_192:
+        return "INTF_WIFI_AUTH_WPA3_ENT_192";
+    case INTF_WIFI_AUTH_WPA3_EXT_PSK:
+        return "INTF_WIFI_AUTH_WPA3_EXT_PSK";
+    case INTF_WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
+        return "INTF_WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE";
+    default:
+        return "Unknown Authentication Mode";
+    }
+}
+
 static void Scan(bool block)
 {
-    if (intf_wifi_StartScanning(block) == INTF_WIFI_STATUS_OK)
+
+    if (intf_wifi_StartScanning(NULL, block) == INTF_WIFI_STATUS_OK)
     {
         ESP_LOGI(TAG, "SCAN DONE");
         const intf_wifi_ApRecord_t *apList = NULL; // This will hold the list of APs
@@ -86,9 +122,9 @@ void app_main(void)
 
     intf_wifi_Start();
 
-    // intf_wifi_SetCredentials(INTF_WIFI_MODE_STA, &sta);
+    intf_wifi_SetCredentials(INTF_WIFI_MODE_STA, &sta);
 
-    // intf_wifi_Connect();
+    intf_wifi_Connect();
 
     Scan(false);
 
@@ -134,10 +170,18 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STOPED", __LINE__, __func__);
         break;
     case INTF_WIFI_EVENT_APSTA_CONNECTED:
+        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_APSTA_CONNECTED", __LINE__, __func__);
         break;
     case INTF_WIFI_EVENT_APSTA_DISCONNECTED:
+        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_APSTA_DISCONNECTED", __LINE__, __func__);
         break;
     case INTF_WIFI_EVENT_APSTA_GOT_IP:
+        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_APSTA_GOT_IP", __LINE__, __func__);
+        ESP_LOGI(TAG, "mac : " MACSTR, MAC2STR(pData->apStaGotIp.mac));
+        ESP_LOGI(TAG, "ip : " IPSTR, pData->apStaGotIp.ip[0],
+                 pData->apStaGotIp.ip[1],
+                 pData->apStaGotIp.ip[2],
+                 pData->apStaGotIp.ip[3]);
         break;
     case INTF_WIFI_EVENT_STA_START:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STARTED", __LINE__, __func__);
@@ -146,8 +190,17 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STARTED", __LINE__, __func__);
         break;
     case INTF_WIFI_EVENT_STA_CONNECTED:
+        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_STA_CONNECTED", __LINE__, __func__);
+        ESP_LOGI(TAG, "ssid : \"%s\"", pData->staConnected.ssid);
+        ESP_LOGI(TAG, "authmode : \"%s\"", GetAuthModeName(pData->staConnected.authMode));
+        ESP_LOGI(TAG, "aid : \"%d\"", pData->staConnected.aid);
+
         break;
     case INTF_WIFI_EVENT_STA_DISCONNECTED:
+        ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_STA_DISCONNECTED", __LINE__, __func__);
+        ESP_LOGI(TAG, "ssid : \"%s\"", pData->staDisconnected.ssid);
+        ESP_LOGI(TAG, "reason : \"%d\"", pData->staDisconnected.reason);
+
         break;
     case INTF_WIFI_EVENT_STA_GOT_IP:
         break;
