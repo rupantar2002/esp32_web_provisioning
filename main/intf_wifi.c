@@ -27,8 +27,6 @@ typedef struct
         uint8_t scanning : 1;
     } flags;
     wifi_mode_t mode;
-    // intf_wifi_Cred_t apCred;  // TODO may not need to store localy
-    // intf_wifi_Cred_t staCred; // TODO may not need to store localy
     esp_netif_t *apNetif;
     esp_netif_t *staNetif;
     intf_wifi_Event_t evt;
@@ -50,11 +48,25 @@ static const char *TAG = "INTF_WIFI";
 
 static intf_wifi_Ctx_t gIntfWifi = {0};
 
+/**
+ * \brief Handles events comming from wifi api.
+ *
+ * \param arg Argument passed by user.
+ * \param event_base Event base.
+ * \param event_id Event id.
+ * \param event_data Event data.
+ */
 static void WifiEventHandler(void *arg,
                              esp_event_base_t event_base,
                              int32_t event_id,
                              void *event_data);
 
+/**
+ * \brief Convert intf_wifi_Mode_t type to wifi_mode_t.
+ *
+ * \param mode Mode (i.e INTF_WIFI_MODE_STA)
+ * \return wifi_mode_t
+ */
 static wifi_mode_t ConvertToMode(intf_wifi_Mode_t mode)
 {
     wifi_mode_t temp;
@@ -76,6 +88,12 @@ static wifi_mode_t ConvertToMode(intf_wifi_Mode_t mode)
     return temp;
 }
 
+/**
+ * \brief Gives mode value name.
+ *
+ * \param mode Mode.
+ * \return const char* Mode name.
+ */
 static const char *GetModeStr(intf_wifi_Mode_t mode)
 {
     char *modeStr = NULL;
@@ -97,6 +115,12 @@ static const char *GetModeStr(intf_wifi_Mode_t mode)
     return (const char *)modeStr;
 }
 
+/**
+ * \brief Set the wifi mode.
+ *
+ * \return true For success.
+ * \return false For faliour.
+ */
 static bool SetWifiMode(void)
 {
     if (esp_wifi_set_mode(gIntfWifi.mode) != ESP_OK)
@@ -110,14 +134,28 @@ static bool SetWifiMode(void)
     }
 }
 
-void IpToBytes(esp_ip4_addr_t ip, uint8_t *bytes)
+/**
+ * \brief Copy esp_ip4_addr_t to byte array;
+ *
+ * \param ip Ip address.
+ * \param bytes Byte array.
+ * \warning bytes must be >=4 bytes in length.
+ */
+static void IpToBytes(esp_ip4_addr_t ip, uint8_t *bytes)
 {
-    bytes[0] = (ip.addr >> 24) & 0xFF; /* Extract the first byte */
-    bytes[1] = (ip.addr >> 16) & 0xFF; /* Extract the second byte */
-    bytes[2] = (ip.addr >> 8) & 0xFF;  /* Extract the third byte */
-    bytes[3] = ip.addr & 0xFF;         /* Extract the fourth byte */
+    bytes[3] = (ip.addr >> 24) & 0xFF; /* Extract the first byte */
+    bytes[2] = (ip.addr >> 16) & 0xFF; /* Extract the second byte */
+    bytes[1] = (ip.addr >> 8) & 0xFF;  /* Extract the third byte */
+    bytes[0] = ip.addr & 0xFF;         /* Extract the fourth byte */
 }
 
+/**
+ * \brief Copy ap records from internal wifi driver to localy allocated list.
+ *
+ * \param count Number of ap records.
+ * \return true For success.
+ * \return false For faliour.
+ */
 static bool CopyListToBuff(uint16_t count)
 {
     uint8_t success = false;
@@ -176,66 +214,82 @@ static bool CopyListToBuff(uint16_t count)
     return success;
 }
 
-/* Initialize soft AP */
+/**
+ * \brief Configure wifi interface.
+ *
+ * \param intf Wifi interface.
+ * \param pCred Wifi credentials.
+ * \return true For success.
+ * \return false For faliour.
+ */
 static bool ConfigureInterface(wifi_interface_t intf, intf_wifi_Cred_t *const pCred)
 {
 
-    wifi_config_t wifiCfg = {0};
+    wifi_config_t wifiCfg;
+    (void)memset(&wifiCfg, '\0', sizeof(wifiCfg));
 
-    if (esp_wifi_get_config(intf, &wifiCfg) != ESP_OK)
+    if (esp_wifi_get_config(intf, &wifiCfg) == ESP_OK) /* retrive wifi interface config */
     {
-        INTF_WIFI_LOGE(" %d : FAILED TO GET INTERFACE [%d]", __LINE__, intf);
-        return false;
-    }
-
-    switch (intf)
-    {
-    case WIFI_IF_AP:
-        wifiCfg.ap.channel = INTF_WIFI_DEFAULT_CHANNEL;
-        wifiCfg.ap.max_connection = INTF_WIFI_MAX_CONNECTIONS;
-        wifiCfg.ap.authmode = WIFI_AUTH_WPA2_WPA3_PSK;
-        wifiCfg.ap.pmf_cfg.required = false;
-        wifiCfg.ap.ssid_len = 0;
-        (void)strncpy((char *)wifiCfg.ap.ssid, pCred->ssid, sizeof(wifiCfg.ap.ssid));
-        if (strlen(pCred->pass) == 0)
+        switch (intf)
         {
-            wifiCfg.ap.authmode = WIFI_AUTH_OPEN;
+        case WIFI_IF_AP:
+            wifiCfg.ap.channel = INTF_WIFI_DEFAULT_CHANNEL;
+            wifiCfg.ap.max_connection = INTF_WIFI_MAX_CONNECTIONS;
+            wifiCfg.ap.authmode = WIFI_AUTH_WPA2_WPA3_PSK;
+            wifiCfg.ap.pmf_cfg.required = false;
+            wifiCfg.ap.ssid_len = 0;
+            (void)strncpy((char *)wifiCfg.ap.ssid, pCred->ssid, sizeof(wifiCfg.ap.ssid));
+            if (strlen(pCred->pass) == 0)
+            {
+                wifiCfg.ap.authmode = WIFI_AUTH_OPEN;
+            }
+            else
+            {
+                (void)strncpy((char *)wifiCfg.ap.password, pCred->pass, sizeof(wifiCfg.ap.password));
+            }
+
+            break;
+        case WIFI_IF_STA:
+            (void)strncpy((char *)wifiCfg.sta.ssid, pCred->ssid, sizeof(wifiCfg.sta.ssid));
+            (void)strncpy((char *)wifiCfg.sta.password, pCred->pass, sizeof(wifiCfg.sta.password));
+            wifiCfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+            wifiCfg.sta.pmf_cfg.capable = true;
+            wifiCfg.sta.pmf_cfg.required = false;
+            wifiCfg.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+            break;
+        default:
+            INTF_WIFI_LOGE(" %d : INVALID INTERFACE [%d]", __LINE__, intf);
+            return false;
+            break;
+        }
+
+        /* configure wifi interface */
+        if (esp_wifi_set_config(intf, &wifiCfg) == ESP_OK)
+        {
+            return true;
         }
         else
         {
-            (void)strncpy((char *)wifiCfg.ap.password, pCred->pass, sizeof(wifiCfg.ap.password));
+            INTF_WIFI_LOGE(" %d : FAILED TO CONFIGURE INTERFACE [%d]", __LINE__, intf);
         }
-
-        break;
-    case WIFI_IF_STA:
-        (void)strncpy((char *)wifiCfg.sta.ssid, pCred->ssid, sizeof(wifiCfg.sta.ssid));
-        (void)strncpy((char *)wifiCfg.sta.password, pCred->pass, sizeof(wifiCfg.sta.password));
-        wifiCfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-        wifiCfg.sta.pmf_cfg.capable = true;
-        wifiCfg.sta.pmf_cfg.required = false;
-        wifiCfg.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
-        break;
-
-    default:
-        INTF_WIFI_LOGE(" %d : INVALID INTERFACE [%d]", __LINE__, intf);
-        return false;
-        break;
-    }
-
-    if (esp_wifi_set_config(intf, &wifiCfg) != ESP_OK)
-    {
-        INTF_WIFI_LOGE(" %d : FAILED TO CONFIGURE INTERFACE [%d]", __LINE__, intf);
-        return false;
     }
     else
     {
-        return true;
+        INTF_WIFI_LOGE(" %d : FAILED TO GET CONFIG [%d]", __LINE__, intf);
     }
+
+    return false;
 }
 
 intf_wifi_Status_t intf_wifi_Init(void)
 {
-    /* Register Event handler */
+    if (gIntfWifi.flags.init)
+    {
+        INTF_WIFI_LOGE(" %d : ALREADY INITIALIZED", __LINE__);
+        return INTF_WIFI_STATUS_ERROR;
+    }
+
+    /* register for wifi events */
     if (esp_event_handler_instance_register(WIFI_EVENT,
                                             ESP_EVENT_ANY_ID,
                                             &WifiEventHandler,
@@ -246,6 +300,7 @@ intf_wifi_Status_t intf_wifi_Init(void)
         return INTF_WIFI_STATUS_ERROR;
     }
 
+    /* register for ip events */
     if (esp_event_handler_instance_register(IP_EVENT,
                                             ESP_EVENT_ANY_ID,
                                             &WifiEventHandler,
@@ -256,7 +311,7 @@ intf_wifi_Status_t intf_wifi_Init(void)
         return INTF_WIFI_STATUS_ERROR;
     }
 
-    /*Initialize WiFi */
+    /* Initialize WiFi */
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     intf_wifi_Cred_t tempCred;
     esp_err_t errCode = ESP_OK;
@@ -323,6 +378,7 @@ intf_wifi_Status_t intf_wifi_Init(void)
     }
     else
     {
+        gIntfWifi.flags.init = true; /* Set init flag */
         INTF_WIFI_LOGI("WIFI INITIALIZED");
         return INTF_WIFI_STATUS_OK;
     }
@@ -508,12 +564,30 @@ intf_wifi_Status_t intf_wifi_Disconnect(void)
     }
 }
 
+void intf_wifi_DeInit(void)
+{
+    if (gIntfWifi.flags.init)
+    {
+#if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC)
+        if (gIntfWifi.apRecordList)
+        {
+            free(gIntfWifi.apRecordList); /* free record list*/
+        }
+#endif // INTF_WIFI_SCAN_LIST_ALLOC_TYPE
+
+        (void)esp_wifi_disconnect();
+        (void)esp_wifi_stop();
+        (void)esp_wifi_deinit();
+        gIntfWifi.flags.init = false;
+    }
+}
+
 #if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
 
-intf_wifi_Status_t intf_wifi_StartScanning(bool block)
+intf_wifi_Status_t intf_wifi_StartScanning(intf_wifi_ScanParams_t *pParams, bool block)
 {
 
-    if (esp_wifi_scan_start(NULL, block) != ESP_OK) // TODO scanning params
+    if (esp_wifi_scan_start(pParams, block) != ESP_OK) // TODO scanning params
     {
         INTF_WIFI_LOGE(" %d : FAILED TO START SCANNING", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
@@ -545,11 +619,14 @@ intf_wifi_Status_t intf_wifi_GetScanList(const intf_wifi_ApRecord_t **records,
         return INTF_WIFI_STATUS_ERROR;
     }
 
+#if (INTF_WIFI_SCAN_LIST_ALLOC_TYPE == INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC)
+
     if (gIntfWifi.apRecordList == NULL)
     {
         INTF_WIFI_LOGE(" %d : NO LIST FOUND", __LINE__);
         return INTF_WIFI_STATUS_ERROR;
     }
+#endif // INTF_WIFI_SCAN_LIST_ALLOC_TYPE
 
     if (gIntfWifi.apRecordCount)
     {
@@ -681,6 +758,8 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_CONNECTED");
             wifi_event_sta_connected_t *evt = (wifi_event_sta_connected_t *)event_data;
 
+            gIntfWifi.flags.staConn = true; /* set connection flag */
+
             (void)memcpy(gIntfWifi.evtData.staConnected.ssid, evt->ssid, evt->ssid_len);
             (void)memcpy(gIntfWifi.evtData.staConnected.bssid, evt->bssid, sizeof(evt->bssid));
             gIntfWifi.evtData.staConnected.ssidLen = evt->ssid_len;
@@ -694,6 +773,8 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_DISCONNECTED");
             wifi_event_sta_disconnected_t *evt = (wifi_event_sta_disconnected_t *)event_data;
+
+            gIntfWifi.flags.staConn = false; /* reset connection flag */
 
             (void)memcpy(gIntfWifi.evtData.staDisconnected.ssid, evt->ssid, evt->ssid_len);
             (void)memcpy(gIntfWifi.evtData.staDisconnected.bssid, evt->bssid, sizeof(evt->bssid));
@@ -719,19 +800,19 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
             intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_DONE, &gIntfWifi.evtData);
 
             uint8_t success = CopyListToBuff(evt->number);
-            if (success && (evt->status == 0)) /* only call if successful*/
+            if (success && (evt->status == 0)) /* only call if successful */
             {
-                for (int i = 0; i < evt->number; i++) // TODO remove
-                {
-                    INTF_WIFI_LOGD("\n");
-                    INTF_WIFI_LOGD("ssid : \"%s\"", gIntfWifi.apRecordList[i].ssid);
-                    INTF_WIFI_LOGD("rssi : %d", gIntfWifi.apRecordList[i].rssi);
-                    INTF_WIFI_LOGD("primary : %d", gIntfWifi.apRecordList[i].primary);
-                    INTF_WIFI_LOGD("wps : %d", gIntfWifi.apRecordList[i].wps);
-                    INTF_WIFI_LOGD("\n");
-                }
+                // for (int i = 0; i < evt->number; i++)
+                // {
+                //     INTF_WIFI_LOGD("\n");
+                //     INTF_WIFI_LOGD("ssid : \"%s\"", gIntfWifi.apRecordList[i].ssid);
+                //     INTF_WIFI_LOGD("rssi : %d", gIntfWifi.apRecordList[i].rssi);
+                //     INTF_WIFI_LOGD("primary : %d", gIntfWifi.apRecordList[i].primary);
+                //     INTF_WIFI_LOGD("wps : %d", gIntfWifi.apRecordList[i].wps);
+                //     INTF_WIFI_LOGD("\n");
+                // }
 
-                /* scan event */
+                /* scanlist event */
                 gIntfWifi.evtData.scanList.records = (intf_wifi_ApRecord_t *)gIntfWifi.apRecordList;
                 gIntfWifi.evtData.scanList.count = gIntfWifi.apRecordCount;
                 intf_wifi_EventCallback(INTF_WIFI_EVENT_SCAN_LIST, &gIntfWifi.evtData);
