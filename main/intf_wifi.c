@@ -13,7 +13,7 @@
 
 #define INTF_WIFI_LOGE(fmt, ...) ESP_LOGE(TAG, fmt, ##__VA_ARGS__)
 
-#define INTF_WIFI_LOGD(fmt, ...) ESP_LOGW(TAG, fmt, ##__VA_ARGS__)
+#define INTF_WIFI_LOGD(fmt, ...) ESP_LOGD(TAG, fmt, ##__VA_ARGS__)
 
 #define INTF_WIFI_LOGI(fmt, ...) ESP_LOGI(TAG, fmt, ##__VA_ARGS__)
 
@@ -252,10 +252,17 @@ static bool ConfigureInterface(wifi_interface_t intf, intf_wifi_Cred_t *const pC
         case WIFI_IF_STA:
             (void)strncpy((char *)wifiCfg.sta.ssid, pCred->ssid, sizeof(wifiCfg.sta.ssid));
             (void)strncpy((char *)wifiCfg.sta.password, pCred->pass, sizeof(wifiCfg.sta.password));
-            wifiCfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+            wifiCfg.sta.threshold.authmode = WIFI_AUTH_WPA2_WPA3_PSK;
             wifiCfg.sta.pmf_cfg.capable = true;
             wifiCfg.sta.pmf_cfg.required = false;
+#if (INTF_WIFI_FAST_SCAN == 1)
+            wifiCfg.sta.scan_method = WIFI_FAST_SCAN;
+            wifiCfg.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+            wifiCfg.sta.threshold.rssi = -127;
+            wifiCfg.sta.threshold.authmode = WIFI_AUTH_WPA2_WPA3_PSK;
+#else
             wifiCfg.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+#endif
             break;
         default:
             INTF_WIFI_LOGE(" %d : INVALID INTERFACE [%d]", __LINE__, intf);
@@ -584,18 +591,31 @@ void intf_wifi_DeInit(void)
 
 #if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
 
-intf_wifi_Status_t intf_wifi_StartScanning(intf_wifi_ScanParams_t *pParams, bool block)
+intf_wifi_Status_t intf_wifi_StartScanning(intf_wifi_ScanParams_t *pParams)
 {
+    if (pParams)
+    {
+        wifi_scan_config_t scanCfg = {
+            .ssid = pParams->ssid,
+            .channel = pParams->channel,
+            .show_hidden = INTF_WIFI_SHOW_HIDDEN,
+            .scan_type = (pParams->passive ? WIFI_SCAN_TYPE_PASSIVE : WIFI_SCAN_TYPE_ACTIVE),
+            .scan_time.active.min = INTF_WIFI_MIN_ACTIVE_SCAN_TIME,
+            .scan_time.active.max = INTF_WIFI_MAX_ACTIVE_SCAN_TIME,
+            .scan_time.passive = INTF_WIFI_PASSIVE_SCAN_TIME,
+            .home_chan_dwell_time = 100U, /* 100 ms is generally enough; lower values may reduce scan time but increase missed results.*/
+        };
 
-    if (esp_wifi_scan_start(pParams, block) != ESP_OK) // TODO scanning params
-    {
-        INTF_WIFI_LOGE(" %d : FAILED TO START SCANNING", __LINE__);
-        return INTF_WIFI_STATUS_ERROR;
+        if (esp_wifi_scan_start(&scanCfg, pParams->blocking) == ESP_OK) // TODO scanning params
+        {
+            return INTF_WIFI_STATUS_OK;
+        }
+        else
+        {
+            INTF_WIFI_LOGE(" %d : FAILED TO START SCANNING", __LINE__);
+        }
     }
-    else
-    {
-        return INTF_WIFI_STATUS_OK;
-    }
+    return INTF_WIFI_STATUS_ERROR;
 }
 
 intf_wifi_Status_t intf_wifi_StopScanning(void)

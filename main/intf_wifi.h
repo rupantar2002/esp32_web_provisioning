@@ -23,6 +23,16 @@
 
 #if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
 
+#define INTF_WIFI_MAX_ACTIVE_SCAN_TIME 150
+
+#define INTF_WIFI_MIN_ACTIVE_SCAN_TIME 120
+
+#define INTF_WIFI_PASSIVE_SCAN_TIME 200
+
+#define INTF_WIFI_SHOW_HIDDEN  1
+
+#define INTF_WIFI_FAST_SCAN  0
+
 #define INTF_WIFI_SCAN_LIST_ALLOC_STATIC 0 /*!< Static scanlist */
 
 #define INTF_WIFI_SCAN_LIST_ALLOC_DYNAMIC 1 /*!< Dynamic scanlist */
@@ -101,20 +111,14 @@ typedef struct
     char pass[INTF_WIFI_PASSWORD_LEN + 2];
 } intf_wifi_Cred_t;
 
+#if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
+
 typedef struct
 {
     uint8_t *ssid;   /**< SSID of AP */
-    uint8_t *bssid;  /**< MAC address of AP */
     uint8_t channel; /**< channel, scan the specific channel */
-    bool showHidden; /**< enable to scan AP whose SSID is hidden */
     bool passive;    /**< scan type, active or passive */
-    struct
-    {
-        uint32_t min;
-        uint32_t max;
-    } activeTime;
-    uint32_t passiveTime;
-    uint8_t reserved;
+    bool blocking;
 } intf_wifi_ScanParams_t;
 
 /**
@@ -141,6 +145,8 @@ typedef struct
 
 } intf_wifi_ApRecord_t;
 
+#endif // INTF_WIFI_SCAN_STATE
+
 typedef enum
 {
     INTF_WIFI_EVENT_NLL = 0,
@@ -157,9 +163,13 @@ typedef enum
     INTF_WIFI_EVENT_STA_DISCONNECTED,
     INTF_WIFI_EVENT_STA_GOT_IP,
     INTF_WIFI_EVENT_STA_LOST_IP,
+
+#if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
     // scan
     INTF_WIFI_EVENT_SCAN_DONE,
     INTF_WIFI_EVENT_SCAN_LIST,
+#endif // INTF_WIFI_SCAN_STATE
+
     INTF_WIFI_EVENT_MAX,
 } intf_wifi_Event_t;
 
@@ -210,6 +220,8 @@ typedef union
         bool changed;              /*!< Whether the assigned IP has changed or not */
     } staGotIp;
 
+#if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
+
     /* Scanning Events*/
     struct
     {
@@ -222,6 +234,8 @@ typedef union
         uint16_t count;
         intf_wifi_ApRecord_t *records;
     } scanList;
+
+#endif // INTF_WIFI_SCAN_STATE
 
 } intf_wifi_EventData_t;
 
@@ -250,8 +264,7 @@ void intf_wifi_DeInit(void);
 
 #if (INTF_WIFI_SCAN_STATE == INTF_WIFI_SCAN_ENABLE)
 
-intf_wifi_Status_t intf_wifi_StartScanning(intf_wifi_ScanParams_t *pParams,
-                                           bool block);
+intf_wifi_Status_t intf_wifi_StartScanning(intf_wifi_ScanParams_t *pParams);
 
 intf_wifi_Status_t intf_wifi_StopScanning(void);
 
