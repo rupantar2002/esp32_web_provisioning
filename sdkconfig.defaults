@@ -3,3 +3,11 @@
 #
 CONFIG_LWIP_IP_FORWARD=y
 CONFIG_LWIP_IPV4_NAPT=y
+
+# Configure header and uri length
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=512
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# Enable websocket support and set static buffer size
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_WS_BUFFER_SIZE=1024
