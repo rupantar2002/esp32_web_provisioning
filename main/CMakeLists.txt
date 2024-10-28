@@ -1,8 +1,11 @@
 idf_component_register( SRCS            "main.c" 
-                                        "intf_wifi.c"
+                                        # WIFI
+                                        "wifi/intf_wifi.c"
+                                        # SERVICES
                                         "services/service_webserver.c"
                         INCLUDE_DIRS    "."
                                         "services/"
+                                        "wifi/"
                         EMBED_TXTFILES  "../web/index.html"
                                         "../web/favicon.ico"
                       )
