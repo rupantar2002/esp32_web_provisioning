@@ -151,3 +151,21 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         break;
     }
 }
+
+service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
+                                                 service_webserver_EventData_t const *const pData)
+{
+    switch (event)
+    {
+    case SERVICE_WEBSERVER_EVENT_SOCKET_DATA:
+        ESP_LOGI(TAG, " %d : %s : SERVICE_WEBSERVER_EVENT_SOCKET_DATA", __LINE__, __func__);
+        ESP_LOGI(TAG, "len : %d", pData->socketData.len);
+        ESP_LOGI(TAG, "data :'%s'", pData->socketData.data);
+        service_webserver_Send(pData->socketData.data, pData->socketData.len);
+        break;
+    default:
+        break;
+    }
+
+    return SERVICE_STATUS_ERROR;
+}

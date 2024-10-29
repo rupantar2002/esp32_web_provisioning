@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <esp_log.h>
 #include <esp_err.h>
-#include <esp_http_server.h>
 #include <sys/param.h>
+#include <esp_http_server.h>
 #include "service_webserver.h"
 
 #define SERVICE_WEBSERVER_MAX_PATH_LEN (64)
@@ -19,27 +19,20 @@ typedef struct
 typedef struct
 {
     const char *name;
-    bool embed;
-    union loc
-    {
-        struct
-        {
-            const char *start;
-            const char *stop;
-        } embed;
-
-        /* TODO Not implemented */
-        struct
-        {
-            const char *path;
-        } fileSystem;
-    } info;
+    const char *start;
+    const char *stop;
 
 } service_webserver_FileInfo_t;
 
 typedef struct
 {
     httpd_handle_t server;
+    service_webserver_EventData_t eventData;
+    struct
+    {
+        httpd_req_t *req;
+        char buff[SERVICE_WEBSERVER_WS_MAX_BUFFER + 2];
+    } socket;
 
 } service_webserver_Ctx_t;
 
@@ -66,8 +59,8 @@ static const service_webserver_ContentType_t FILE_EXTENSION_TABLE[] = {
 
 /* File information lookup table */
 static const service_webserver_FileInfo_t FILE_INFO_TABLE[] = {
-    {.name = "index.html", .embed = true, .info.embed.start = INDEX_HTML_START, .info.embed.stop = INDEX_HTML_END},
-    {.name = "favicon.ico", .embed = true, .info.embed.start = FAVICON_ICO_START, .info.embed.stop = FAVICON_ICO_END},
+    {.name = "index.html", .start = INDEX_HTML_START, .stop = INDEX_HTML_END},
+    {.name = "favicon.ico", .start = FAVICON_ICO_START, .stop = FAVICON_ICO_END},
 };
 
 #define FILE_COUNT (sizeof(FILE_INFO_TABLE) / sizeof(FILE_INFO_TABLE[0]))
@@ -83,9 +76,10 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req);
 
 /* Uri information table */
 static const httpd_uri_t URI_INFO_TABLE[] = {
-    {.uri = "/*", .method = HTTP_GET, .handler = GenericGetHandler, .user_ctx = NULL},
-    {.uri = "/*", .method = HTTP_POST, .handler = GenericPostHandler, .user_ctx = NULL},
-    // {.uri = "/ws", .is_websocket = true, .method = HTTP_GET, .handler = GenericSocketHandler, .user_ctx = NULL},
+    {.uri = "/ws", .method = HTTP_GET, .handler = &GenericSocketHandler, .user_ctx = NULL, .is_websocket = true},
+    {.uri = "/*", .method = HTTP_GET, .handler = &GenericGetHandler, .user_ctx = NULL},
+    {.uri = "/*", .method = HTTP_POST, .handler = &GenericPostHandler, .user_ctx = NULL},
+
 };
 
 #define URI_COUNT (sizeof(URI_INFO_TABLE) / sizeof(URI_INFO_TABLE[0]))
@@ -125,7 +119,6 @@ static const service_webserver_FileInfo_t *GetFileInfo(const char *filename)
     uint8_t found = false;
     for (i = 0; i < FILE_COUNT; i++)
     {
-        /* TODO remove base path before comparing if using filesystem */
         if (strcmp(filename, FILE_INFO_TABLE[i].name) == 0)
         {
             found = true;
@@ -143,11 +136,11 @@ static const service_webserver_FileInfo_t *GetFileInfo(const char *filename)
     }
 }
 
-void GetFilenameAndExtension(const char *path,
-                             char *filename,
-                             uint16_t filename_size,
-                             char *extension,
-                             uint16_t extension_size)
+static void GetFilenameAndExtension(const char *path,
+                                    char *filename,
+                                    uint16_t filename_size,
+                                    char *extension,
+                                    uint16_t extension_size)
 {
     const char *slash = path;
     const char *dot = NULL;
@@ -191,10 +184,10 @@ void GetFilenameAndExtension(const char *path,
     }
 }
 
-void MakeFullFilename(char *buffer,
-                      uint16_t size,
-                      const char *filename,
-                      const char *extension)
+static void MakeFullFilename(char *buffer,
+                             uint16_t size,
+                             const char *filename,
+                             const char *extension)
 {
     // Copy filename to buffer, up to buffer size limit
     uint16_t filename_len = 0;
@@ -220,110 +213,6 @@ void MakeFullFilename(char *buffer,
     buffer[filename_len] = '\0';
 }
 
-// /*
-//  * Structure holding server handle
-//  * and internal socket fd in order
-//  * to use out of request send
-//  */
-// struct async_resp_arg
-// {
-//     httpd_handle_t hd;
-//     int fd;
-// };
-
-// /*
-//  * async send function, which we put into the httpd work queue
-//  */
-// static void ws_async_send(void *arg)
-// {
-//     static const char *data = "Async data";
-//     struct async_resp_arg *resp_arg = arg;
-//     httpd_handle_t hd = resp_arg->hd;
-//     int fd = resp_arg->fd;
-//     httpd_ws_frame_t ws_pkt;
-//     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-//     ws_pkt.payload = (uint8_t *)data;
-//     ws_pkt.len = strlen(data);
-//     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-
-//     httpd_ws_send_frame_async(hd, fd, &ws_pkt);
-//     free(resp_arg);
-// }
-
-// static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
-// {
-//     struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
-//     if (resp_arg == NULL)
-//     {
-//         return ESP_ERR_NO_MEM;
-//     }
-//     resp_arg->hd = req->handle;
-//     resp_arg->fd = httpd_req_to_sockfd(req);
-//     esp_err_t ret = httpd_queue_work(handle, ws_async_send, resp_arg);
-//     if (ret != ESP_OK)
-//     {
-//         free(resp_arg);
-//     }
-//     return ret;
-// }
-
-// /*
-//  * This handler echos back the received ws data
-//  * and triggers an async send if certain message received
-//  */
-// static esp_err_t EchoHandler(httpd_req_t *req)
-// {
-//     if (req->method == HTTP_GET)
-//     {
-//         ESP_LOGI(TAG, "Handshake done, the new connection was opened");
-//         return ESP_OK;
-//     }
-
-//     httpd_ws_frame_t wsPkt;
-
-//     uint8_t *buf = NULL;
-//     memset(&wsPkt, 0, sizeof(httpd_ws_frame_t));
-//     wsPkt.type = HTTPD_WS_TYPE_TEXT;
-
-//     /* Set max_len = 0 to get the frame len */
-//     esp_err_t ret = httpd_ws_recv_frame(req, &wsPkt, 0);
-//     if (ret != ESP_OK)
-//     {
-//         ESP_LOGE(TAG, "FAILED TO GET FRAME LENGTH");
-//         return ret;
-//     }
-//     ESP_LOGI(TAG, "FRAME LENGTH = %d ", wsPkt.len);
-
-//     if (wsPkt.len > 0 && wsPkt.len < APP_SERVER_WS_PAYLOAD_SIZE)
-//     {
-
-//         // clear payload buffer
-//         (void)memset(gPayloadBuff, '\0', sizeof(gPayloadBuff));
-
-//         // ws_pkt.payload = buf;
-//         wsPkt.payload = (uint8_t *)gPayloadBuff;
-
-//         /* Set max_len = ws_pkt.len to get the frame payload */
-//         ret = httpd_ws_recv_frame(req, &wsPkt, wsPkt.len);
-
-//         if (ret != ESP_OK)
-//         {
-//             ESP_LOGE(TAG, "FAILED TO PARSE WS FRAME");
-//             return ret;
-//         }
-//         ESP_LOGI(TAG, "Got packet with message:\"%s\"", wsPkt.payload);
-
-//         // Generate callback
-//         app_server_SocketDataCB((const char *)wsPkt.payload, wsPkt.len);
-//     }
-//     else
-//     {
-//         ESP_LOGW(TAG, "PACKET LENGTH TOO LONG");
-//     }
-
-//     return ret;
-// }
-
 static esp_err_t GenericGetHandler(httpd_req_t *req)
 {
     SERVICE_LOGD("'GET' Handler called");
@@ -331,7 +220,7 @@ static esp_err_t GenericGetHandler(httpd_req_t *req)
     esp_err_t errCode = ESP_OK;
     char filepath[SERVICE_WEBSERVER_MAX_PATH_LEN] = {0};
     char filename[SERVICE_WEBSERVER_MAX_FILE_LEN] = {0};
-    char extension[SERVICE_WEBSERVER_MAX_PATH_LEN] = {0};
+    char extension[SERVICE_WEBSERVER_MAX_EXTENSION_LEN] = {0};
 
     if (req->uri[strlen(req->uri) - 1] == '/')
     {
@@ -382,8 +271,8 @@ static esp_err_t GenericGetHandler(httpd_req_t *req)
 
     if (fileInfo)
     {
-        ssize_t len = fileInfo->info.embed.stop - fileInfo->info.embed.start;
-        errCode = httpd_resp_send(req, fileInfo->info.embed.start, len);
+        ssize_t len = fileInfo->stop - fileInfo->start;
+        errCode = httpd_resp_send(req, fileInfo->start, len);
 
         if (errCode != ESP_OK)
         {
@@ -401,13 +290,104 @@ static esp_err_t GenericGetHandler(httpd_req_t *req)
 
 static esp_err_t GenericPostHandler(httpd_req_t *req)
 {
+    SERVICE_LOGD("'POST' Handler called");
+    (void)req;
     return ESP_OK;
 }
 
-// static esp_err_t GenericSocketHandler(httpd_req_t *req)
-// {
-//     return ESP_OK;
-// }
+#if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
+
+static bool SendWsFrame(httpd_req_t *req, const char *msg, uint16_t len)
+{
+    httpd_ws_frame_t ws_pkt;
+    (void)memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    ws_pkt.payload = (uint8_t *)msg;
+    ws_pkt.len = len;
+
+    if (httpd_ws_send_frame(gServerCtx.socket.req, &ws_pkt) == ESP_OK)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+static esp_err_t GenericSocketHandler(httpd_req_t *req)
+{
+    SERVICE_LOGD("'SOCKET' Handler called");
+
+    if (req->method == HTTP_GET)
+    {
+        SERVICE_LOGD("Websocket connected");
+        gServerCtx.socket.req = req;
+
+        /* callback */
+        (void)memset(&gServerCtx.eventData, '\0', sizeof(gServerCtx.eventData));
+        gServerCtx.eventData.socketConn.connected = true;
+        if (service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_SOCKET_CONN,
+                                            &gServerCtx.eventData) != SERVICE_STATUS_OK)
+        {
+            SERVICE_LOGE("'SERVICE_WEBSERVER_EVENT_SOCKET_CONN' status 'Negetive' ");
+        }
+
+        return ESP_OK;
+    }
+
+    httpd_ws_frame_t wsPkt;
+    (void)memset(&wsPkt, 0, sizeof(httpd_ws_frame_t));
+    wsPkt.type = HTTPD_WS_TYPE_TEXT;
+
+    /* Set max_len = 0 to get the frame len */
+    esp_err_t ret = httpd_ws_recv_frame(req, &wsPkt, 0);
+    if (ret != ESP_OK)
+    {
+        SERVICE_LOGE(" %d : FAILED TO GET FRAME LENGTH", __LINE__);
+        return ret;
+    }
+    SERVICE_LOGD("Frame Length = %d ", wsPkt.len);
+
+    if (wsPkt.len > 0 && wsPkt.len < SERVICE_WEBSERVER_WS_MAX_BUFFER)
+    {
+
+        // clear payload buffer
+        (void)memset(gServerCtx.socket.buff, '\0', sizeof(gServerCtx.socket.buff));
+
+        wsPkt.payload = (uint8_t *)gServerCtx.socket.buff;
+
+        /* Set max_len = ws_pkt.len to get the frame payload */
+        ret = httpd_ws_recv_frame(req, &wsPkt, wsPkt.len);
+
+        if (ret != ESP_OK)
+        {
+            SERVICE_LOGE(" %d : FAILED TO PARSE WS FRAME", __LINE__);
+            return ret;
+        }
+
+        SERVICE_LOGD("payload : '%s'", wsPkt.payload);
+
+        /* callback */
+        (void)memset(&gServerCtx.eventData, '\0', sizeof(gServerCtx.eventData));
+        gServerCtx.eventData.socketData.data = (char *)wsPkt.payload;
+        gServerCtx.eventData.socketData.len = wsPkt.len;
+        if (service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_SOCKET_DATA,
+                                            &gServerCtx.eventData) != SERVICE_STATUS_OK)
+        {
+            SERVICE_LOGE("'SERVICE_WEBSERVER_EVENT_SOCKET_DATA' status 'Negetive' ");
+        }
+    }
+    else
+    {
+        SERVICE_LOGE(" %d : PACKET LENGTH TOO LONG", __LINE__);
+    }
+
+    return ret;
+}
+
+#endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
 service_Status_t service_webserver_Start(void)
 {
@@ -464,8 +444,46 @@ service_Status_t service_webserver_Stop(void)
     return SERVICE_STATUS_ERROR;
 }
 
-void app_server_Stop(void)
+#if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
+
+bool service_webserver_IsSocketConnected(void)
 {
+    const char *msg = "";
+    if (SendWsFrame(gServerCtx.socket.req, msg, 0))
+    {
+        return true;
+    }
+    else
+    {
+        gServerCtx.socket.req = NULL;
+        return false;
+    }
 }
 
-__attribute__((__weak__)) void app_server_SocketDataCB(const char *json, size_t len) {}
+service_Status_t service_webserver_Send(const char *msg, uint16_t len)
+{
+    if (msg && len > 0)
+    {
+        if (SendWsFrame(gServerCtx.socket.req, msg, len))
+        {
+            SERVICE_LOGD("Sent message: %s", msg);
+            return SERVICE_STATUS_OK;
+        }
+        else
+        {
+            gServerCtx.socket.req = NULL;
+            SERVICE_LOGE(" %d : FAILED TO SEND MESSAGE", __LINE__);
+        }
+    }
+    return SERVICE_STATUS_ERROR;
+}
+
+#endif // SERVICE_WEBSERVER_USE_WEBSOCKET
+
+__attribute__((__weak__)) service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
+                                                                           service_webserver_EventData_t const *const pData)
+{
+    (void)event;
+    (void)pData;
+    return SERVICE_STATUS_OK;
+}
