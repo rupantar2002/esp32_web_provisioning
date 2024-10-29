@@ -43,6 +43,14 @@ extern const char INDEX_HTML_START[] asm("_binary_index_html_start");
 extern const char INDEX_HTML_END[] asm("_binary_index_html_end");
 
 /* Embedded file entry for index.html */
+extern const char STYLE_CSS_START[] asm("_binary_style_css_start");
+extern const char STYLE_CSS_END[] asm("_binary_style_css_end");
+
+/* Embedded file entry for index.html */
+extern const char SCRIPT_JS_START[] asm("_binary_script_js_start");
+extern const char SCRIPT_JS_END[] asm("_binary_script_js_end");
+
+/* Embedded file entry for index.html */
 extern const char FAVICON_ICO_START[] asm("_binary_favicon_ico_start");
 extern const char FAVICON_ICO_END[] asm("_binary_favicon_ico_end");
 

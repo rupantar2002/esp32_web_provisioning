@@ -7,5 +7,7 @@ idf_component_register( SRCS            "main.c"
                                         "services/"
                                         "wifi/"
                         EMBED_TXTFILES  "../web/index.html"
+                                        "../web/style.css"
+                                        "../web/script.js"
                                         "../web/favicon.ico"
                       )
