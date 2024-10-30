@@ -283,6 +283,7 @@ static esp_err_t GenericGetHandler(httpd_req_t *req)
     if (fileInfo)
     {
         ssize_t len = fileInfo->stop - fileInfo->start;
+        len -= 1; // remove null charecter from responce
         errCode = httpd_resp_send(req, fileInfo->start, len);
 
         if (errCode != ESP_OK)
