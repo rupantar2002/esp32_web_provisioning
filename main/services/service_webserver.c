@@ -39,6 +39,10 @@ typedef struct
 static const char *TAG = "SERVICE_WEBSERVER";
 
 /* Embedded file entry for index.html */
+extern const char FAVICON_ICO_START[] asm("_binary_favicon_ico_start");
+extern const char FAVICON_ICO_END[] asm("_binary_favicon_ico_end");
+
+/* Embedded file entry for index.html */
 extern const char INDEX_HTML_START[] asm("_binary_index_html_start");
 extern const char INDEX_HTML_END[] asm("_binary_index_html_end");
 
@@ -49,10 +53,6 @@ extern const char STYLE_CSS_END[] asm("_binary_style_css_end");
 /* Embedded file entry for index.html */
 extern const char SCRIPT_JS_START[] asm("_binary_script_js_start");
 extern const char SCRIPT_JS_END[] asm("_binary_script_js_end");
-
-/* Embedded file entry for index.html */
-extern const char FAVICON_ICO_START[] asm("_binary_favicon_ico_start");
-extern const char FAVICON_ICO_END[] asm("_binary_favicon_ico_end");
 
 static const service_webserver_ContentType_t FILE_EXTENSION_TABLE[] = {
     {.ext = ".txt", .type = "text/plain"},
@@ -68,7 +68,10 @@ static const service_webserver_ContentType_t FILE_EXTENSION_TABLE[] = {
 /* File information lookup table */
 static const service_webserver_FileInfo_t FILE_INFO_TABLE[] = {
     {.name = "index.html", .start = INDEX_HTML_START, .stop = INDEX_HTML_END},
+    {.name = "style.css", .start = STYLE_CSS_START, .stop = STYLE_CSS_END},
+    {.name = "script.js", .start = SCRIPT_JS_START, .stop = SCRIPT_JS_END},
     {.name = "favicon.ico", .start = FAVICON_ICO_START, .stop = FAVICON_ICO_END},
+
 };
 
 #define FILE_COUNT (sizeof(FILE_INFO_TABLE) / sizeof(FILE_INFO_TABLE[0]))
