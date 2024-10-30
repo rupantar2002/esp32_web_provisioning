@@ -4,11 +4,16 @@
 #include <esp_err.h>
 #include <sys/param.h>
 #include <esp_http_server.h>
+#include <esp_tls_crypto.h>
 #include "service_webserver.h"
 
 #define SERVICE_WEBSERVER_MAX_PATH_LEN (64U)
 #define SERVICE_WEBSERVER_MAX_FILE_LEN (32U)
 #define SERVICE_WEBSERVER_MAX_EXTENSION_LEN (16U)
+#define HTTPD_401 "401 UNAUTHORIZED" /*!< HTTP Response 401 */
+
+#define BASE64_LENGTH (((SERVICE_WEBSERVER_MAX_USERNAME + SERVICE_WEBSERVER_MAX_PASSWORD + 1) + 2) / 3) * 4
+#define AUTH_HEADER_LENGTH (15 + BASE64_LENGTH + 1)
 
 typedef struct
 {
@@ -28,11 +33,24 @@ typedef struct
 {
     httpd_handle_t server;
     service_webserver_EventData_t eventData;
+
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+    struct
+    {
+        char user[SERVICE_WEBSERVER_MAX_USERNAME + 2];
+        char pass[SERVICE_WEBSERVER_MAX_PASSWORD + 2];
+        char hdrBuff[6 + AUTH_HEADER_LENGTH + 2];
+        char digest[6 + AUTH_HEADER_LENGTH + 2];
+    } auth;
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
+
+#if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
     struct
     {
         httpd_req_t *req;
         char buff[SERVICE_WEBSERVER_WS_MAX_BUFFER + 2];
     } socket;
+#endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
 } service_webserver_Ctx_t;
 
@@ -82,15 +100,33 @@ static esp_err_t GenericGetHandler(httpd_req_t *req);
 /* Generic 'POST' uri handler */
 static esp_err_t GenericPostHandler(httpd_req_t *req);
 
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+
+/* Basic authentication uri handler */
+static esp_err_t BasicAuthHandler(httpd_req_t *req);
+
+#endif // SERVICE_WEBSERVER_USE_WEBSOCKET
+
+#if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
+
 /* Generic 'SOCKET' uri handler */
 static esp_err_t GenericSocketHandler(httpd_req_t *req);
 
+#endif // SERVICE_WEBSERVER_USE_WEBSOCKET
+
 /* Uri information table */
 static const httpd_uri_t URI_INFO_TABLE[] = {
+
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+    {.uri = "/auth", .method = HTTP_GET, .handler = &BasicAuthHandler, .user_ctx = NULL},
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
+
+#if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
     {.uri = "/ws", .method = HTTP_GET, .handler = &GenericSocketHandler, .user_ctx = NULL, .is_websocket = true},
+#endif // SERVICE_WEBSERVER_USE_WEBSOCKET
+
     {.uri = "/*", .method = HTTP_GET, .handler = &GenericGetHandler, .user_ctx = NULL},
     {.uri = "/*", .method = HTTP_POST, .handler = &GenericPostHandler, .user_ctx = NULL},
-
 };
 
 #define URI_COUNT (sizeof(URI_INFO_TABLE) / sizeof(URI_INFO_TABLE[0]))
@@ -117,29 +153,6 @@ static const char *GetContentType(const char *extension)
     if (found)
     {
         return FILE_EXTENSION_TABLE[i].type;
-    }
-    else
-    {
-        return NULL;
-    }
-}
-
-static const service_webserver_FileInfo_t *GetFileInfo(const char *filename)
-{
-    uint16_t i;
-    uint8_t found = false;
-    for (i = 0; i < FILE_COUNT; i++)
-    {
-        if (strcmp(filename, FILE_INFO_TABLE[i].name) == 0)
-        {
-            found = true;
-            break;
-        }
-    }
-
-    if (found)
-    {
-        return &FILE_INFO_TABLE[i];
     }
     else
     {
@@ -214,7 +227,6 @@ static void MakeFullFilename(char *buffer,
     }
 
     // Append extension to buffer
-    size_t ext_len = 0;
     while (*extension && filename_len < size - 1)
     {
         buffer[filename_len++] = *extension++;
@@ -222,6 +234,29 @@ static void MakeFullFilename(char *buffer,
 
     // Null-terminate the result
     buffer[filename_len] = '\0';
+}
+
+static const service_webserver_FileInfo_t *GetFileInfo(const char *filename)
+{
+    uint16_t i;
+    uint8_t found = false;
+    for (i = 0; i < FILE_COUNT; i++)
+    {
+        if (strcmp(filename, FILE_INFO_TABLE[i].name) == 0)
+        {
+            found = true;
+            break;
+        }
+    }
+
+    if (found)
+    {
+        return &FILE_INFO_TABLE[i];
+    }
+    else
+    {
+        return NULL;
+    }
 }
 
 static esp_err_t GenericGetHandler(httpd_req_t *req)
@@ -306,6 +341,124 @@ static esp_err_t GenericPostHandler(httpd_req_t *req)
     (void)req;
     return ESP_OK;
 }
+
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+
+static bool CreateDigest(void)
+{
+
+    int rc;
+    size_t out;
+    char tempBuff[SERVICE_WEBSERVER_MAX_USERNAME + SERVICE_WEBSERVER_MAX_PASSWORD + 2];
+    /* Clear user info buffer */
+
+    (void)memset(tempBuff, '\0', sizeof(tempBuff));
+
+    /* Create user info */
+    rc = snprintf(tempBuff,
+                  sizeof(tempBuff),
+                  "%s:%s", gServerCtx.auth.user,
+                  gServerCtx.auth.pass);
+    if (rc <= 0)
+    {
+        ESP_LOGE(TAG, " %d : USER INFO TOO LONG", __LINE__);
+        return false;
+    }
+
+    /* Clear digest buffer */
+    (void)memset(gServerCtx.auth.digest, '\0', sizeof(gServerCtx.auth.digest));
+
+    (void)strncpy(gServerCtx.auth.digest, "Basic ", sizeof(gServerCtx.auth.digest));
+
+    if (esp_crypto_base64_encode((unsigned char *)gServerCtx.auth.digest + 6,
+                                 sizeof(gServerCtx.auth.digest),
+                                 &out,
+                                 (const unsigned char *)tempBuff,
+                                 strlen(tempBuff)) < 0)
+    {
+        return false;
+    }
+
+    SERVICE_LOGD("digest : %s", gServerCtx.auth.digest);
+    return true;
+}
+
+static esp_err_t BasicAuthHandler(httpd_req_t *req)
+{
+    SERVICE_LOGD("'Authentication' Handler called");
+    size_t len = 0;
+    char *resp = NULL;
+
+    /* clear header buffer */
+    (void)memset(gServerCtx.auth.hdrBuff, '\0', sizeof(gServerCtx.auth.hdrBuff));
+
+    /* Read header length */
+    len = httpd_req_get_hdr_value_len(req, "Authorization");
+    len += 1;
+
+    if (len > 1)
+    {
+        if (len > sizeof(gServerCtx.auth.hdrBuff))
+        {
+            SERVICE_LOGE(" %d : HEADER LENGTH TOO LONG", __LINE__);
+            return ESP_ERR_NO_MEM;
+        }
+
+        /* Read header value */
+        if (httpd_req_get_hdr_value_str(req,
+                                        "Authorization",
+                                        gServerCtx.auth.hdrBuff,
+                                        len) == ESP_OK)
+        {
+            SERVICE_LOGD("Authorization: %s", gServerCtx.auth.hdrBuff);
+
+            if (!CreateDigest())
+            {
+                SERVICE_LOGE(" %d : No DIGEST FOUND", __LINE__);
+                return ESP_ERR_NO_MEM;
+            }
+
+            if (strncmp(gServerCtx.auth.digest, gServerCtx.auth.hdrBuff, len) == 0)
+            {
+                SERVICE_LOGD("Authenticated!");
+                (void)httpd_resp_set_status(req, HTTPD_200);
+
+                /* clear tempBuff buffer ,reuse it for responce */
+                static char tempBuff[100]; // TODO remove
+                (void)snprintf(tempBuff,
+                               sizeof(tempBuff),
+                               "{\"authenticated\": true,\"user\": \"%s\"}",
+                               gServerCtx.auth.user);
+
+                /* set responce parameters */
+                resp = tempBuff;
+                len = strlen(resp);
+            }
+            else
+            {
+                SERVICE_LOGE("NOT AUTHENTICATED");
+            }
+        }
+        else
+        {
+            SERVICE_LOGE(" %d : NO VALUE FOUND", __LINE__);
+        }
+    }
+    else
+    {
+        SERVICE_LOGE(" %d : NO HEADER FOUND", __LINE__);
+        (void)httpd_resp_set_status(req, HTTPD_401);
+        len = 0;
+    }
+
+    (void)httpd_resp_set_type(req, "application/json");
+    (void)httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    (void)httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Hello\"");
+
+    return httpd_resp_send(req, resp, len);
+}
+
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
 
 #if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
 
@@ -414,7 +567,6 @@ service_Status_t service_webserver_Start(void)
         if (httpd_start(&gServerCtx.server, &config) == ESP_OK)
         {
             uint16_t i;
-
             for (i = 0; i < URI_COUNT; i++)
             {
                 if (httpd_register_uri_handler(gServerCtx.server, &URI_INFO_TABLE[i]) != ESP_OK)
@@ -422,6 +574,11 @@ service_Status_t service_webserver_Start(void)
                     SERVICE_LOGE("%d : URI REGISTATION FAILED ('%s')", __LINE__, URI_INFO_TABLE[i].uri);
                 }
             }
+
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+            (void)strncpy(gServerCtx.auth.user, SESERVICE_WEBSERVER_DEFAULT_USERNAME, sizeof(gServerCtx.auth.user));
+            (void)strncpy(gServerCtx.auth.pass, SESERVICE_WEBSERVER_DEFAULT_PASSWORD, sizeof(gServerCtx.auth.pass));
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
 
             SERVICE_LOGI("Webserver  Started");
             return SERVICE_STATUS_OK;
@@ -455,6 +612,26 @@ service_Status_t service_webserver_Stop(void)
     }
     return SERVICE_STATUS_ERROR;
 }
+
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+
+service_Status_t service_webserver_SetAuth(const char *username, const char *password)
+{
+    if (username && password)
+    {
+        (void)strncpy(gServerCtx.auth.user, username, sizeof(gServerCtx.auth.user));
+        (void)strncpy(gServerCtx.auth.pass, password, sizeof(gServerCtx.auth.pass));
+        return SERVICE_STATUS_OK;
+    }
+    else
+    {
+        SERVICE_LOGE(" %d : INVALID INPUT", __LINE__);
+    }
+
+    return SERVICE_STATUS_ERROR;
+}
+
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
 
 #if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
 
@@ -492,7 +669,7 @@ service_Status_t service_webserver_Send(const char *msg, uint16_t len)
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
-__attribute__((__weak__)) service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
+__attribute__((__weak__)) service_Status_t service_webserver_EventCallback(service_webserver_EventBase_t event,
                                                                            service_webserver_EventData_t const *const pData)
 {
     (void)event;

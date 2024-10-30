@@ -2,7 +2,7 @@
 #define __SERVICE_WEBSERVER_H__
 #include "service.h"
 
-#define SERVICE_WEBSERVER_USE_WEBSOCKET 1
+#define SERVICE_WEBSERVER_USE_WEBSOCKET 0
 
 #if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
 
@@ -10,18 +10,28 @@
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
+#define SERVICE_WEBSERVER_USE_BASIC_AUTH 1
+
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+
+#define SERVICE_WEBSERVER_MAX_USERNAME 24U
+#define SERVICE_WEBSERVER_MAX_PASSWORD 24U
+
+#define SESERVICE_WEBSERVER_DEFAULT_USERNAME "admin"
+#define SESERVICE_WEBSERVER_DEFAULT_PASSWORD "admin"
+
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
+
 typedef enum
 {
     SERVICE_WEBSERVER_EVENT_NULL = 0,
-    SERVICE_WEBSERVER_EVENT_USER,
-    
-    /* Websocket events */
+/* Websocket events */
 #if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
     SERVICE_WEBSERVER_EVENT_SOCKET_CONN,
     SERVICE_WEBSERVER_EVENT_SOCKET_DATA,
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
-    SERVICE_WEBSERVER_EVENT_MAX,
-} service_webserver_Event_t;
+    SERVICE_WEBSERVER_EVENT_USER,
+} service_webserver_EventBase_t;
 
 typedef struct
 {
@@ -51,6 +61,13 @@ service_webserver_Start(void);
 
 service_Status_t service_webserver_Stop(void);
 
+#if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
+
+service_Status_t service_webserver_SetAuth(const char *username,
+                                                     const char *password);
+
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
+
 #if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
 
 bool service_webserver_IsSocketConnected(void);
@@ -59,7 +76,7 @@ service_Status_t service_webserver_Send(const char *msg, uint16_t len);
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
-service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
+service_Status_t service_webserver_EventCallback(service_webserver_EventBase_t event,
                                                  service_webserver_EventData_t const *const pData);
 
 #endif //__SERVICE_WEBSERVER_H__

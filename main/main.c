@@ -1,16 +1,3 @@
-/*
- * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Unlicense OR CC0-1.0
- */
-/*  WiFi softAP & station Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <stdio.h>
 #include <string.h>
 #include <freertos/FreeRTOS.h>
@@ -26,19 +13,64 @@
 
 static const char *TAG = "MAIN";
 
-void app_main(void)
+/**
+ * \brief Initalize NVS flash,netif and default event loop.
+ * \note  The operations are cutial so if not sccessfull
+ *        restart will be performed.
+ * \warning Restarts the device.
+ */
+static void SystemInit(void)
 {
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    esp_err_t errCode = ESP_OK;
+
+    /* Initialize NVS */
+    errCode = nvs_flash_init();
+
+    if (errCode == ESP_ERR_NVS_NO_FREE_PAGES ||
+        errCode == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
         ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
+        errCode = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(ret);
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    if (errCode != ESP_OK)
+    {
+        ESP_LOGE(TAG, "NVS INITIALIZATION FAILED");
+        esp_restart();
+    }
+
+    ESP_LOGI(TAG, "NVS Falsh Initialized");
+
+    /* Init Netif */
+    errCode = esp_netif_init();
+
+    if (errCode != ESP_OK)
+    {
+        ESP_LOGE(TAG, "NETIF INITIALIZATION FAILED");
+        esp_restart();
+    }
+
+    ESP_LOGI(TAG, "Netif Initialized");
+
+    /* Init Event Loop */
+    errCode = esp_event_loop_create_default();
+
+    if (errCode != ESP_OK)
+    {
+        ESP_LOGE(TAG, "EVENT LOOP CREATION FAILED");
+        esp_restart();
+    }
+
+    ESP_LOGI(TAG, "Default Event Loop Created");
+}
+
+/**
+ * \brief Entry point for any application.
+ *
+ */
+void app_main(void)
+{
+    SystemInit();
 
     intf_wifi_Cred_t sta = {
         .ssid = "DESKTOP-762IJ28 3231",
@@ -75,6 +107,7 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
     case INTF_WIFI_EVENT_AP_STARTED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STARTED", __LINE__, __func__);
         service_webserver_Start();
+        service_webserver_SetAuth("user1234567890123456789", "P@ssw0rd_12345678901234");
         break;
     case INTF_WIFI_EVENT_AP_STOPED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STOPED", __LINE__, __func__);
@@ -88,11 +121,11 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         break;
     case INTF_WIFI_EVENT_APSTA_GOT_IP:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_APSTA_GOT_IP", __LINE__, __func__);
-        ESP_LOGI(TAG, "mac : " MACSTR, MAC2STR(pData->apStaGotIp.mac));
-        ESP_LOGI(TAG, "ip : " IPSTR, pData->apStaGotIp.ip[0],
-                 pData->apStaGotIp.ip[1],
-                 pData->apStaGotIp.ip[2],
-                 pData->apStaGotIp.ip[3]);
+        // ESP_LOGI(TAG, "mac : " MACSTR, MAC2STR(pData->apStaGotIp.mac));
+        // ESP_LOGI(TAG, "ip : " IPSTR, pData->apStaGotIp.ip[0],
+        //          pData->apStaGotIp.ip[1],
+        //          pData->apStaGotIp.ip[2],
+        //          pData->apStaGotIp.ip[3]);
         break;
     case INTF_WIFI_EVENT_STA_START:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STARTED", __LINE__, __func__);
@@ -109,8 +142,8 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         break;
     case INTF_WIFI_EVENT_STA_DISCONNECTED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_STA_DISCONNECTED", __LINE__, __func__);
-        ESP_LOGI(TAG, "ssid : \"%s\"", pData->staDisconnected.ssid);
-        ESP_LOGI(TAG, "reason : \"%d\"", pData->staDisconnected.reason);
+        // ESP_LOGI(TAG, "ssid : \"%s\"", pData->staDisconnected.ssid);
+        // ESP_LOGI(TAG, "reason : \"%d\"", pData->staDisconnected.reason);
 
         break;
     case INTF_WIFI_EVENT_STA_GOT_IP:
@@ -152,17 +185,17 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
     }
 }
 
-service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
+service_Status_t service_webserver_EventCallback(service_webserver_EventBase_t event,
                                                  service_webserver_EventData_t const *const pData)
 {
     switch (event)
     {
-    case SERVICE_WEBSERVER_EVENT_SOCKET_DATA:
-        ESP_LOGI(TAG, " %d : %s : SERVICE_WEBSERVER_EVENT_SOCKET_DATA", __LINE__, __func__);
-        ESP_LOGI(TAG, "len : %d", pData->socketData.len);
-        ESP_LOGI(TAG, "data :'%s'", pData->socketData.data);
-        service_webserver_Send(pData->socketData.data, pData->socketData.len);
-        break;
+    // case SERVICE_WEBSERVER_EVENT_SOCKET_DATA:
+    //     ESP_LOGI(TAG, " %d : %s : SERVICE_WEBSERVER_EVENT_SOCKET_DATA", __LINE__, __func__);
+    //     ESP_LOGI(TAG, "len : %d", pData->socketData.len);
+    //     ESP_LOGI(TAG, "data :'%s'", pData->socketData.data);
+    //     service_webserver_Send(pData->socketData.data, pData->socketData.len);
+    //     break;
     default:
         break;
     }

@@ -6,6 +6,16 @@
   </head>
   <body>
     <h2>Device Management Portal</h2>
+
+    <button onclick="makeRequest()">Make Request</button>
+    <p id="result"></p>
+
+    <!-- Full-Screen Loader Overlay -->
+    <div id="loader-overlay">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Navigation tabs -->
     <div class="tab">
       <button class="tablinks" onclick="openTab(event, 'Provisioning')">
         Provisioning
@@ -63,7 +73,45 @@
         <button onclick="setNewValue('text')">Set Value</button>
       </div>
     </div>
+    <script>
+      function makeRequest() {
+        const username = "user1234567890123456789"; // Replace with your username
+        const password = "P@ssw0rd_12345678901234"; // Replace with your password
+        const url = "/auth"; // Replace with your ESP32 IP and endpoint
 
-    <script src="script.js"></script>
+        // Create a new XMLHttpRequest object
+        const xhr = new XMLHttpRequest();
+
+        // Configure it: GET-request for the URL
+        xhr.open("GET", url, true);
+
+        // Set up the Basic Auth header
+        const auth = "Basic " + btoa(username + ":" + password);
+        xhr.setRequestHeader("Authorization", auth);
+
+        // Set up the callback function to handle the response
+        xhr.onload = function () {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            // Successful response
+            document.getElementById("result").innerText = xhr.responseText;
+          } else {
+            // Handle error responses
+            document.getElementById("result").innerText =
+              "Error: " + xhr.statusText;
+          }
+        };
+
+        // Handle network errors
+        xhr.onerror = function () {
+          document.getElementById("result").innerText = "Network Error";
+        };
+
+        // Send the request
+        xhr.send();
+      }
+      
+    </script>
+
+    <!-- <script src="script.js"></script> -->
   </body>
 </html>
