@@ -6,9 +6,9 @@
 #include <esp_http_server.h>
 #include "service_webserver.h"
 
-#define SERVICE_WEBSERVER_MAX_PATH_LEN (64)
-#define SERVICE_WEBSERVER_MAX_FILE_LEN (25)
-#define SERVICE_WEBSERVER_MAX_EXTENSION_LEN (10)
+#define SERVICE_WEBSERVER_MAX_PATH_LEN (64U)
+#define SERVICE_WEBSERVER_MAX_FILE_LEN (32U)
+#define SERVICE_WEBSERVER_MAX_EXTENSION_LEN (16U)
 
 typedef struct
 {
