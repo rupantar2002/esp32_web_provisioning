@@ -1,117 +1,51 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
   </head>
   <body>
-    <h2>Device Management Portal</h2>
-
-    <button onclick="makeRequest()">Make Request</button>
-    <p id="result"></p>
-
-    <!-- Full-Screen Loader Overlay -->
-    <div id="loader-overlay">
-      <div class="spinner"></div>
-    </div>
-
-    <!-- Navigation tabs -->
-    <div class="tab">
-      <button class="tablinks" onclick="openTab(event, 'Provisioning')">
-        Provisioning
-      </button>
-      <button class="tablinks" onclick="openTab(event, 'OTA')">OTA</button>
-      <button class="tablinks" onclick="openTab(event, 'DummyData')">
-        Dummy Data
-      </button>
-    </div>
-
-    <!-- Provisioning Tab -->
-    <div id="Provisioning" class="tabcontent">
-      <div class="container">
-        <h3>Wi-Fi Provisioning</h3>
-        <button onclick="startDummyScan()">Scan for Networks</button>
-        <ul id="scanlist"></ul>
-        <label>SSID:</label>
-        <input type="text" id="ssid" readonly /><br />
-        <label>Password:</label>
-        <input type="password" id="password" /><br />
-        <button onclick="connectToNetwork()">Connect</button>
-        <div>
-          Connection Status:
-          <span id="connection-status" class="status-indicator"></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- OTA Tab -->
-    <div id="OTA" class="tabcontent">
-      <h3>OTA Firmware Update</h3>
-      <div class="container">
-        <input type="file" id="ota-file" accept=".bin" />
-        <button onclick="startOTA()">Upload</button>
-        <div id="ota-status"></div>
-      </div>
-    </div>
-
-    <!-- Dummy Data Tab -->
-    <div id="DummyData" class="tabcontent">
-      <h3>Dummy Data Inputs</h3>
-      <div class="container">
-        <label class="output-header" id="previousNumber"
-          >Previous Number: 0</label
-        >
-        <label class="output-header" id="headerNumber">Number Output: </label>
-        <input type="number" id="inputNumber" /><br />
-        <button onclick="setNewValue('number')">Set Value</button><br /><br />
-
-        <label class="output-header" id="previousText"
-          >Previous Text: N/A</label
-        >
-        <label class="output-header" id="headerText">Text Output: </label>
-        <input type="text" id="inputText" /><br />
-        <button onclick="setNewValue('text')">Set Value</button>
-      </div>
-    </div>
-    <script>
-      function makeRequest() {
-        const username = "user1234567890123456789"; // Replace with your username
-        const password = "P@ssw0rd_12345678901234"; // Replace with your password
-        const url = "/auth"; // Replace with your ESP32 IP and endpoint
-
-        // Create a new XMLHttpRequest object
-        const xhr = new XMLHttpRequest();
-
-        // Configure it: GET-request for the URL
-        xhr.open("GET", url, true);
-
-        // Set up the Basic Auth header
-        const auth = "Basic " + btoa(username + ":" + password);
-        xhr.setRequestHeader("Authorization", auth);
-
-        // Set up the callback function to handle the response
-        xhr.onload = function () {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            // Successful response
-            document.getElementById("result").innerText = xhr.responseText;
-          } else {
-            // Handle error responses
-            document.getElementById("result").innerText =
-              "Error: " + xhr.statusText;
-          }
-        };
-
-        // Handle network errors
-        xhr.onerror = function () {
-          document.getElementById("result").innerText = "Network Error";
-        };
-
-        // Send the request
-        xhr.send();
-      }
-      
-    </script>
-
-    <!-- <script src="script.js"></script> -->
+    <label for="text_input">Write something</label>
+    <input id="text_input" type="text" maxlength=200 />
+    <button onclick="sendData()">Send</button>
+    <p>
+      Lorem ipsum dolor sit amet consectetur adipisicing elit. Pariatur rem,
+      quae maxime accusamus temporibus voluptatum provident asperiores incidunt
+      repudiandae optio ipsa non quibusdam blanditiis necessitatibus. Ea
+      pariatur voluptatibus illum perferendis.
+    </p>
   </body>
+  <script>
+    const socket = new WebSocket("/ws");
+    let connected = false;
+
+    socket.onopen = function (event) {
+      console.log("Connected to WebSocket server");
+      connected = true;
+    };
+
+    socket.onmessage = function (event) {
+      console.log("Message from server:", event.data);
+    };
+
+    socket.onclose = function (event) {
+      console.log("Disconnected from WebSocket server");
+      connected = false;
+    };
+
+    socket.onerror = function (error) {
+      console.error("WebSocket error:", error);
+    };
+
+    function sendData() {
+      if (connected) {
+        const inputText = document.getElementById("text_input");
+        console.log(inputText.value);
+        socket.send(inputText.value);
+      } else {
+        console.log("socket not connected");
+      }
+    }
+  </script>
 </html>
