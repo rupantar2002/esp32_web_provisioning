@@ -715,7 +715,7 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
                              int32_t event_id, void *event_data)
 {
     /* clears event data */
-    (void)memset(&gIntfWifi.evtData, 0, sizeof(&gIntfWifi.evtData));
+    (void)memset(&gIntfWifi.evtData, 0, sizeof(gIntfWifi.evtData));
 
     if (event_base == WIFI_EVENT)
     {
@@ -761,9 +761,6 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
         case WIFI_EVENT_STA_START:
         {
             INTF_WIFI_LOGD("WIFI_EVENT => WIFI_EVENT_STA_START");
-
-            wifi_event_sta_connected_t *evt = (wifi_event_sta_connected_t *)event_data;
-
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_START, &gIntfWifi.evtData);
             break;
         }
@@ -783,7 +780,7 @@ static void WifiEventHandler(void *arg, esp_event_base_t event_base,
             (void)memcpy(gIntfWifi.evtData.staConnected.ssid, evt->ssid, evt->ssid_len);
             (void)memcpy(gIntfWifi.evtData.staConnected.bssid, evt->bssid, sizeof(evt->bssid));
             gIntfWifi.evtData.staConnected.ssidLen = evt->ssid_len;
-            gIntfWifi.evtData.staConnected.authMode = evt->authmode;
+            gIntfWifi.evtData.staConnected.authMode = (intf_wifi_AuthMode_t)evt->authmode;
             gIntfWifi.evtData.staConnected.aid = evt->aid;
 
             intf_wifi_EventCallback(INTF_WIFI_EVENT_STA_CONNECTED, &gIntfWifi.evtData);

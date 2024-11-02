@@ -1,5 +1,4 @@
 #include <string.h>
-#include <stdlib.h>
 #include <esp_log.h>
 #include <esp_err.h>
 #include <sys/param.h>
@@ -48,7 +47,7 @@ typedef struct
     struct
     {
         httpd_req_t *req;
-        char buff[SERVICE_WEBSERVER_WS_MAX_BUFFER + 2];
+        uint8_t buff[SERVICE_WEBSERVER_WS_MAX_BUFFER + 2];
     } socket;
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
@@ -503,8 +502,8 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req)
     }
 
     httpd_ws_frame_t wsPkt;
-    (void)memset(&wsPkt, 0, sizeof(httpd_ws_frame_t));
     wsPkt.type = HTTPD_WS_TYPE_TEXT;
+    (void)memset(&wsPkt, 0, sizeof(httpd_ws_frame_t));
 
     /* Set max_len = 0 to get the frame len */
     esp_err_t ret = httpd_ws_recv_frame(req, &wsPkt, 0);
@@ -532,16 +531,28 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req)
             return ret;
         }
 
+        SERVICE_LOGD("len : '%d'", wsPkt.len);
         SERVICE_LOGD("payload : '%s'", wsPkt.payload);
 
-        /* callback */
-        (void)memset(&gServerCtx.eventData, '\0', sizeof(gServerCtx.eventData));
-        gServerCtx.eventData.socketData.data = (char *)wsPkt.payload;
-        gServerCtx.eventData.socketData.len = wsPkt.len;
-        if (service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_SOCKET_DATA,
-                                            &gServerCtx.eventData) != SERVICE_STATUS_OK)
+        /* Parse data */
+        gServerCtx.eventData.userBase.parent = 0;
+        gServerCtx.eventData.userBase.data = wsPkt.payload;
+        gServerCtx.eventData.userBase.len = wsPkt.len;
+        const service_webserver_UserBase_t *dest = service_webserver_ParseUserData(&gServerCtx.eventData.userBase);
+
+        if (!dest)
         {
-            SERVICE_LOGE("'SERVICE_WEBSERVER_EVENT_SOCKET_DATA' status 'Negetive' ");
+            SERVICE_LOGE(" %d : FAILED TO PARSE USER DATA", __LINE__);
+        }
+        else
+        {
+
+            /* callback */
+            if (service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_USER,
+                                                (service_webserver_EventData_t *)dest) != SERVICE_STATUS_OK)
+            {
+                SERVICE_LOGE("Event Status Negetive 'SERVICE_WEBSERVER_EVENT_USER' ");
+            }
         }
     }
     else
@@ -560,7 +571,6 @@ service_Status_t service_webserver_Start(void)
     {
         /* Generate default server configuration */
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-
         config.uri_match_fn = httpd_uri_match_wildcard;
 
         /* Start the httpd server */
@@ -669,10 +679,17 @@ service_Status_t service_webserver_Send(const char *msg, uint16_t len)
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
-__attribute__((__weak__)) service_Status_t service_webserver_EventCallback(service_webserver_EventBase_t event,
+__attribute__((__weak__)) service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
                                                                            service_webserver_EventData_t const *const pData)
 {
+    SERVICE_LOGD(" Default Event Function ");
     (void)event;
     (void)pData;
     return SERVICE_STATUS_OK;
+}
+
+__attribute__((__weak__)) const service_webserver_UserBase_t *service_webserver_ParseUserData(const service_webserver_UserBase_t *src)
+{
+    SERVICE_LOGD(" Default Parser Function ");
+    return src;
 }

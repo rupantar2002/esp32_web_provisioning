@@ -1,18 +1,36 @@
-// Open first tab by default
-document.querySelector(".tab button").click();
+/* Ajax context */
+const xhr = new XMLHttpRequest();
+const socket = new WebSocket("/ws");
 
-// Open websocket connection.
-const socket = new WebSocket('ws:/');
+socket.onopen = function (event) {
+  console.log("Connected to WebSocket server");
+  socket.send("start");
+};
 
+socket.onmessage = function (event) {
+  console.log("Message from server:", event.data);
+  // HANDLE MESSAGE
+};
 
+socket.onclose = function (event) {
+  console.log("Disconnected from WebSocket server");
+};
+
+socket.onerror = function (error) {
+  console.error("WebSocket error:", error);
+};
+
+// Send a message after 1 second
+setTimeout(() => {
+  socket.send("Another message from the client!");
+}, 1000);
 // Function to show the loader and freeze the UI
 function showLoader() {
   document.getElementById("loader-overlay").style.display = "flex";
-  // Simulate a process (e.g., waiting for a response)
-  const timeout = setTimeout(() => {
-    hideLoader(); // Hide loader after timeout
+  return setTimeout(() => {
+    hideLoader();
     alert("Request timed out!");
-  }, 10000); // Timeout duration (5 seconds)
+  }, timeoutDuration);
 }
 
 // Function to hide the loader and unfreeze the UI
@@ -20,9 +38,70 @@ function hideLoader() {
   document.getElementById("loader-overlay").style.display = "none";
 }
 
+// Open the first tab by default
+document.querySelector(".tab button").click();
 
-// Call simulateRequest on page load
-window.onload = simulateRequest;
+// Function to authenticate the user
+function authenticateUser() {
+  const username = document.getElementById("authUsername").value;
+  const password = document.getElementById("authPassword").value;
+  const url = "/auth"; // Replace with your ESP32 authentication endpoint
+
+  // Set up Basic Auth header
+  const auth = "Basic " + btoa(username + ":" + password);
+  const xhr = new XMLHttpRequest();
+  xhr.open("GET", url, true);
+  xhr.setRequestHeader("Authorization", auth);
+
+  showLoader(); // Show loader while waiting for authentication response
+
+  xhr.onload = function () {
+    hideLoader(); // Hide loader after receiving the response
+    if (xhr.status === 200) {
+      // Hide the authentication modal and show the main content
+      document.getElementById("authModal").style.display = "none";
+      document.getElementById("mainContent").style.display = "block";
+    } else {
+      document.getElementById("errorMessage").innerText =
+        "Authentication failed. Please try again.";
+    }
+  };
+
+  xhr.onerror = function () {
+    hideLoader(); // Hide loader in case of an error
+    document.getElementById("errorMessage").innerText =
+      "Network error. Please check your connection.";
+  };
+
+  xhr.send();
+}
+
+// Wrapping functions to handle loader and requests
+function wrappedRequest(requestFunction) {
+  return function () {
+    showLoader();
+    setTimeout(() => {
+      hideLoader();
+      alert("Request timed out!");
+    }, 10000); // Set a timeout for response
+    requestFunction(); // Call the original request function
+  };
+}
+
+// Example: wrapping makeRequest function with loader
+function makeRequest() {
+  const xhr = new XMLHttpRequest();
+  xhr.open("GET", "/some-endpoint", true); // Replace with actual endpoint
+  xhr.onload = function () {
+    hideLoader();
+    document.getElementById("result").innerText = xhr.responseText;
+  };
+  xhr.onerror = function () {
+    hideLoader();
+    document.getElementById("result").innerText = "Network Error";
+  };
+  xhr.send();
+}
 
 // Tab switching functionality
 function openTab(evt, tabName) {
@@ -82,17 +161,17 @@ function calculateRSSIWidth(rssi) {
 }
 
 // Show dummy scan list on button press
-function startDummyScan() {
+function startScan() {
   const scanList = document.getElementById("scanlist");
   scanList.innerHTML = ""; // Clear the previous scan list
 
   dummyNetworks.forEach((network) => {
+
     const listItem = document.createElement("li");
     listItem.className = "network-item";
 
     const icon = document.createElement("span");
     icon.className = "network-icon";
-    //icon.innerHTML = "🔒"; // Network icon
     icon.innerHTML = "&#128274;"; // Unicode for the lock icon 🔒
 
     const info = document.createElement("div");
@@ -138,7 +217,7 @@ function connectToNetwork() {
 
   if (
     password === "" &&
-    !confirm("No password provided. Continue with open connection?")
+    confirm("No password provided. Continue with open connection?")
   ) {
     return;
   }
@@ -155,15 +234,31 @@ function connectToNetwork() {
 
 // Start OTA update process
 function startOTA() {
-  const otaFile = document.getElementById("ota-file").files[0];
-  if (!otaFile) {
-    alert("Please select a firmware file to upload.");
-    return;
-  }
-  // Simulate OTA update status
-  document.getElementById("ota-status").innerText = "Uploading firmware...";
-  setTimeout(() => {
-    document.getElementById("ota-status").innerText =
-      "Firmware uploaded successfully!";
-  }, 2000);
+  console.log("OTA request");
+
+  // const otaFile = document.getElementById("ota-file").files[0];
+  // if (!otaFile) {
+  //   alert("Please select a firmware file to upload.");
+  //   return;
+  // }
+  // // Simulate OTA update status
+  // document.getElementById("ota-status").innerText = "Uploading firmware...";
+  // setTimeout(() => {
+  //   document.getElementById("ota-status").innerText =
+  //     "Firmware uploaded successfully!";
+  // }, 2000);
 }
+
+function sendRequest(type, data) {
+  const message = JSON.stringify({ type, data });
+  const timeoutId = startLoader();
+
+  // Send message through WebSocket
+  socket.send(message);
+}
+
+window.onload = function () {
+  // Show the authentication modal on page load
+  document.getElementById("authModal").style.display = "flex";
+  document.getElementById("authUsername").focus();
+};

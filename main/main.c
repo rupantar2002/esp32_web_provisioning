@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <string.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -9,7 +8,9 @@
 #include <esp_log.h>
 #include <esp_err.h>
 #include "intf_wifi.h"
-#include "services/service_webserver.h"
+#include "service.h"
+#include "service_webserver.h"
+#include "app_webserver.h"
 
 static const char *TAG = "MAIN";
 
@@ -185,20 +186,33 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
     }
 }
 
-service_Status_t service_webserver_EventCallback(service_webserver_EventBase_t event,
+service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
                                                  service_webserver_EventData_t const *const pData)
 {
+    service_Status_t status;
     switch (event)
     {
-    // case SERVICE_WEBSERVER_EVENT_SOCKET_DATA:
-    //     ESP_LOGI(TAG, " %d : %s : SERVICE_WEBSERVER_EVENT_SOCKET_DATA", __LINE__, __func__);
-    //     ESP_LOGI(TAG, "len : %d", pData->socketData.len);
-    //     ESP_LOGI(TAG, "data :'%s'", pData->socketData.data);
-    //     service_webserver_Send(pData->socketData.data, pData->socketData.len);
-    //     break;
+    case SERVICE_WEBSERVER_EVENT_USER:
+        ESP_LOGI(TAG, " %d : %s : SERVICE_WEBSERVER_EVENT_USER", __LINE__, __func__);
+        ESP_LOGI(TAG, "parent : %d", pData->userBase.parent);
+        ESP_LOGI(TAG, "len : %d", pData->userBase.len);
+        ESP_LOGI(TAG, "data :'%s'", pData->userBase.data);
+
+        if (pData->userBase.parent > 0)
+        {
+            app_webserver_UserData_t *usrData = service_CONTAINER_OF(&pData->userBase,
+                                                                     app_webserver_UserData_t, super);
+            ESP_LOGI(TAG, " request_type : %d ", usrData->req);
+        }
+
+        app_webserver_CreateResponce(APP_WEBSERVER_REPONCE_SCANLIST);
+        status = service_webserver_Send((const char *)pData->userBase.data, pData->userBase.len);
+
+        break;
     default:
+        status = SERVICE_STATUS_OK;
         break;
     }
 
-    return SERVICE_STATUS_ERROR;
+    return status;
 }
