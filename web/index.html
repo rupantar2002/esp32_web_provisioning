@@ -6,9 +6,14 @@
     <title>Document</title>
   </head>
   <body>
-    <label for="text_input">Write something</label>
-    <input id="text_input" type="text" maxlength=200 />
-    <button onclick="sendData()">Send</button>
+    <button id="btn_scan" onclick="scanNetworks()">Scan start</button> <br />
+    <div id="container_scanlist">Scan list</div>
+    <br />
+    <label for="input_ssid">SSID</label>
+    <input id="input_ssid" type="text" maxlength="32" /><br />
+    <label for="input_pass">PASSWORD</label>
+    <input id="input_pass" type="text" maxlength="64" /><br />
+    <button onclick="provision(true)">Connect</button>
     <p>
       Lorem ipsum dolor sit amet consectetur adipisicing elit. Pariatur rem,
       quae maxime accusamus temporibus voluptatum provident asperiores incidunt
@@ -19,6 +24,7 @@
   <script>
     const socket = new WebSocket("/ws");
     let connected = false;
+    let scanStart = false;
 
     socket.onopen = function (event) {
       console.log("Connected to WebSocket server");
@@ -46,6 +52,62 @@
       } else {
         console.log("socket not connected");
       }
+    }
+
+    function provision(open) {
+      const ssid = document.getElementById("input_ssid").value;
+      const pass = document.getElementById("input_pass").value;
+      if (!ssid) {
+        alert("Enter valid ssid");
+        return;
+      }
+
+      if (!pass && !open) {
+        alert("Network is peotected,Enter valid passsword");
+        return;
+      }
+
+      // log resuest data
+      console.log(
+        "connection requested { ssid : " + ssid + " , pass : " + pass + "}"
+      );
+
+      const req = createRequest("prvsn", {
+        ssid: ssid,
+        pass: pass,
+      });
+
+      socket.send(JSON.stringify(req));
+    }
+
+    function scanNetworks() {
+      const act = scanStart ? "stop" : "start";
+      const req = createRequest("scan", {
+        action: act,
+      });
+
+      socket.send(JSON.stringify(req));
+      scanStart = !scanStart;
+    }
+
+    function createRequest(type, data) {
+      let request = { type };
+
+      switch (type) {
+        case "scan":
+          request.action = data.action; // 'start' or 'stop'
+          break;
+
+        case "prvsn":
+          request.ssid = data.ssid;
+          request.pass = data.pass;
+          break;
+
+        default:
+          throw new Error(`Unknown request type: ${type}`);
+      }
+      console.log(`Request Type: ${type}`, request);
+      return request;
     }
   </script>
 </html>

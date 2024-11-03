@@ -12,7 +12,17 @@
 #include "service_webserver.h"
 #include "app_webserver.h"
 
+typedef enum
+{
+    EVENT_NULL = -1,
+    EVENT_START_SCAN = ((1UL << 0UL)),
+    EVENT_STOP_SCAN = ((1UL << 1UL)),
+    EVENT_PROVISION = ((1UL << 1UL)),
+} Event_t;
+
 static const char *TAG = "MAIN";
+
+static EventGroupHandle_t gEventGroup = NULL;
 
 /**
  * \brief Initalize NVS flash,netif and default event loop.
@@ -71,12 +81,16 @@ static void SystemInit(void)
  */
 void app_main(void)
 {
+
+    // define a variable which holds the state of events
+    const EventBits_t bitsToWaitFor = (EVENT_START_SCAN | EVENT_STOP_SCAN | EVENT_PROVISION);
+    EventBits_t eventGroupValue;
+
+    gEventGroup = xEventGroupCreate();
+    configASSERT(gEventGroup);
+
     SystemInit();
 
-    intf_wifi_Cred_t sta = {
-        .ssid = "DESKTOP-762IJ28 3231",
-        .pass = "12345678",
-    };
 
     intf_wifi_IpInfo_t ipInfo = {
         .ip = INTF_WIFI_IPV4(10, 10, 10, 10),
@@ -92,11 +106,28 @@ void app_main(void)
 
     intf_wifi_SetIpInfo(&ipInfo);
 
-    // intf_wifi_SetCredentials(INTF_WIFI_MODE_STA, &sta);
 
-    // intf_wifi_Connect();
+    while (true)
+    {
+        eventGroupValue = xEventGroupWaitBits(gEventGroup,
+                                              bitsToWaitFor,
+                                              pdTRUE,
+                                              pdTRUE,
+                                              portMAX_DELAY);
 
-    // Scan(true);
+        if ((eventGroupValue & EVENT_START_SCAN) != 0)
+        {
+            ESP_LOGI(TAG, "EVENT_START_SCAN");
+        }
+        if ((eventGroupValue & EVENT_STOP_SCAN) != 0)
+        {
+            ESP_LOGI(TAG, "EVENT_STOP_SCAN");
+        }
+        if ((eventGroupValue & EVENT_PROVISION) != 0)
+        {
+            ESP_LOGI(TAG, "EVENT_PROVISION");
+        }
+    }
 }
 
 void intf_wifi_EventCallback(intf_wifi_Event_t event,
@@ -136,15 +167,14 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         break;
     case INTF_WIFI_EVENT_STA_CONNECTED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_STA_CONNECTED", __LINE__, __func__);
-        // ESP_LOGI(TAG, "ssid : \"%s\"", pData->staConnected.ssid);
-        // ESP_LOGI(TAG, "authmode : \"%s\"", GetAuthModeName(pData->staConnected.authMode));
-        // ESP_LOGI(TAG, "aid : \"%d\"", pData->staConnected.aid);
+        ESP_LOGI(TAG, "ssid : \"%s\"", pData->staConnected.ssid);
+        ESP_LOGI(TAG, "aid : \"%d\"", pData->staConnected.aid);
 
         break;
     case INTF_WIFI_EVENT_STA_DISCONNECTED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_STA_DISCONNECTED", __LINE__, __func__);
-        // ESP_LOGI(TAG, "ssid : \"%s\"", pData->staDisconnected.ssid);
-        // ESP_LOGI(TAG, "reason : \"%d\"", pData->staDisconnected.reason);
+        ESP_LOGI(TAG, "ssid : \"%s\"", pData->staDisconnected.ssid);
+        ESP_LOGI(TAG, "reason : \"%d\"", pData->staDisconnected.reason);
 
         break;
     case INTF_WIFI_EVENT_STA_GOT_IP:
@@ -194,15 +224,34 @@ service_Status_t service_webserver_EventCallback(service_webserver_Event_t event
     {
     case SERVICE_WEBSERVER_EVENT_USER:
         ESP_LOGI(TAG, " %d : %s : SERVICE_WEBSERVER_EVENT_USER", __LINE__, __func__);
-        ESP_LOGI(TAG, "parent : %d", pData->userBase.parent);
-        ESP_LOGI(TAG, "len : %d", pData->userBase.len);
-        ESP_LOGI(TAG, "data :'%s'", pData->userBase.data);
+        // ESP_LOGI(TAG, "parent : %d", pData->userBase.parent);
+        // ESP_LOGI(TAG, "len : %d", pData->userBase.len);
+        // ESP_LOGI(TAG, "data :'%s'", pData->userBase.data);
 
         if (pData->userBase.parent > 0)
         {
-            app_webserver_UserData_t *usrData = service_CONTAINER_OF(&pData->userBase,
+            app_webserver_UserData_t *usrData = SERVICE_CONTAINER_OF(&pData->userBase,
                                                                      app_webserver_UserData_t, super);
             ESP_LOGI(TAG, " request_type : %d ", usrData->req);
+
+            switch (usrData->req)
+            {
+            case APP_WEBSERVER_REQUEST_PROVSN:
+                ESP_LOGI(TAG, "provisioning Request :{ ssid: %s , pass: %s }",
+                         usrData->reqData.provsn.ssid,
+                         usrData->reqData.provsn.pass);
+
+                /* Start Provisioning */
+                intf_wifi_Cred_t cred;
+                (void)strncpy(cred.ssid, usrData->reqData.provsn.ssid, sizeof(cred.ssid));
+                (void)strncpy(cred.pass, usrData->reqData.provsn.pass, sizeof(cred.pass));
+                (void)intf_wifi_SetCredentials(INTF_WIFI_MODE_STA, &cred);
+                (void)intf_wifi_Connect();
+
+                break;
+            default:
+                break;
+            }
         }
 
         app_webserver_CreateResponce(APP_WEBSERVER_REPONCE_SCANLIST);

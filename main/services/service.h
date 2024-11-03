@@ -31,13 +31,13 @@ typedef uint8_t service_Status_t;
  *
  *   void foo( BaseA *a,BaseB *b)
  *   {
- *      Derived* derived_from_baseA = service_CONTAINER_OF(a, Derived, baseA);
- *      Derived* derived_from_baseB = service_CONTAINER_OF(b, Derived, baseB);
+ *      Derived* derived_from_baseA = SERVICE_CONTAINER_OF(a, Derived, baseA);
+ *      Derived* derived_from_baseB = SERVICE_CONTAINER_OF(b, Derived, baseB);
  *   }
  *
  * \endcode
  */
-#define service_CONTAINER_OF(ptr, type, member) \
+#define SERVICE_CONTAINER_OF(ptr, type, member) \
     ((type *)((char *)(ptr) - offsetof(type, member)))
 
 #define SERVICE_LOGE(fmt, ...) ESP_LOGE(TAG, fmt, ##__VA_ARGS__)
