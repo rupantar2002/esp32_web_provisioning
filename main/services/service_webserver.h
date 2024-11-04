@@ -8,7 +8,8 @@
 
 #if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
 
-#define SERVICE_WEBSERVER_WS_MAX_BUFFER 256U
+#define SERVICE_WEBSERVER_RX_BUFFER 256U
+#define SERVICE_WEBSERVER_TX_BUFFER 512U
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
@@ -71,6 +72,8 @@ service_Status_t service_webserver_SetAuth(const char *username,
 bool service_webserver_IsSocketConnected(void);
 
 service_Status_t service_webserver_Send(const char *msg, uint16_t len);
+
+service_Status_t service_webserver_SendAsync(const char *msg, uint16_t len);
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 

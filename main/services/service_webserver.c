@@ -14,6 +14,23 @@
 #define BASE64_LENGTH (((SERVICE_WEBSERVER_MAX_USERNAME + SERVICE_WEBSERVER_MAX_PASSWORD + 1) + 2) / 3) * 4
 #define AUTH_HEADER_LENGTH (15 + BASE64_LENGTH + 1)
 
+#if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
+
+/*
+ * Structure holding server handle
+ * and internal socket fd in order
+ * to use out of request send
+ */
+typedef struct
+{
+    httpd_handle_t hd;
+    int fd;
+    uint8_t *buff;
+    uint16_t len;
+} service_webserver_AsyncResp_t;
+
+#endif // SERVICE_WEBSERVER_USE_WEBSOCKET
+
 typedef struct
 {
     const char *ext;
@@ -25,7 +42,6 @@ typedef struct
     const char *name;
     const char *start;
     const char *stop;
-
 } service_webserver_FileInfo_t;
 
 typedef struct
@@ -47,7 +63,9 @@ typedef struct
     struct
     {
         httpd_req_t *req;
-        uint8_t buff[SERVICE_WEBSERVER_WS_MAX_BUFFER + 2];
+        int fd;
+        uint8_t rxBuff[SERVICE_WEBSERVER_RX_BUFFER + 2];
+        uint8_t txBuff[SERVICE_WEBSERVER_TX_BUFFER + 2];
     } socket;
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
@@ -461,23 +479,28 @@ static esp_err_t BasicAuthHandler(httpd_req_t *req)
 
 #if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
 
-static bool SendWsFrame(httpd_req_t *req, const char *msg, uint16_t len)
+static void SendAsyncFrame(void *arg)
 {
+    service_webserver_AsyncResp_t *pRespArg = (service_webserver_AsyncResp_t *)arg;
     httpd_ws_frame_t ws_pkt;
-    (void)memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-
+    memset(&ws_pkt, '\0', sizeof(httpd_ws_frame_t));
+    ws_pkt.payload = (uint8_t *)pRespArg->buff;
+    ws_pkt.len = pRespArg->len;
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    ws_pkt.payload = (uint8_t *)msg;
-    ws_pkt.len = len;
 
-    if (httpd_ws_send_frame(gServerCtx.socket.req, &ws_pkt) == ESP_OK)
+    if (httpd_ws_send_frame_async(pRespArg->hd,
+                                  pRespArg->fd,
+                                  &ws_pkt) != ESP_OK)
     {
-        return true;
+        SERVICE_LOGE(" %d : FAILED TO SEND FRAME", __LINE__);
     }
     else
     {
-        return false;
+        SERVICE_LOGD("msg len : %d", pRespArg->len);
+        SERVICE_LOGD("msg : '%s'", pRespArg->buff);
     }
+
+    free(pRespArg);
 }
 
 static esp_err_t GenericSocketHandler(httpd_req_t *req)
@@ -487,7 +510,9 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req)
     if (req->method == HTTP_GET)
     {
         SERVICE_LOGD("Websocket connected");
+
         gServerCtx.socket.req = req;
+        gServerCtx.socket.fd = httpd_req_to_sockfd(req);
 
         /* callback */
         (void)memset(&gServerCtx.eventData, '\0', sizeof(gServerCtx.eventData));
@@ -514,13 +539,12 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req)
     }
     SERVICE_LOGD("Frame Length = %d ", wsPkt.len);
 
-    if (wsPkt.len > 0 && wsPkt.len < SERVICE_WEBSERVER_WS_MAX_BUFFER)
+    if (wsPkt.len > 0 && wsPkt.len < SERVICE_WEBSERVER_RX_BUFFER)
     {
-
         // clear payload buffer
-        (void)memset(gServerCtx.socket.buff, '\0', sizeof(gServerCtx.socket.buff));
+        (void)memset(gServerCtx.socket.rxBuff, '\0', sizeof(gServerCtx.socket.rxBuff));
 
-        wsPkt.payload = (uint8_t *)gServerCtx.socket.buff;
+        wsPkt.payload = (uint8_t *)gServerCtx.socket.rxBuff;
 
         /* Set max_len = ws_pkt.len to get the frame payload */
         ret = httpd_ws_recv_frame(req, &wsPkt, wsPkt.len);
@@ -546,7 +570,6 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req)
         }
         else
         {
-
             /* callback */
             if (service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_USER,
                                                 (service_webserver_EventData_t *)dest) != SERVICE_STATUS_OK)
@@ -588,6 +611,10 @@ service_Status_t service_webserver_Start(void)
 #if (SERVICE_WEBSERVER_USE_BASIC_AUTH == 1)
             (void)strncpy(gServerCtx.auth.user, SESERVICE_WEBSERVER_DEFAULT_USERNAME, sizeof(gServerCtx.auth.user));
             (void)strncpy(gServerCtx.auth.pass, SESERVICE_WEBSERVER_DEFAULT_PASSWORD, sizeof(gServerCtx.auth.pass));
+#endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
+
+#if (SERVICE_WEBSERVER_USE_WEBSOCKET == 1)
+            gServerCtx.socket.fd = -1;
 #endif // SERVICE_WEBSERVER_USE_BASIC_AUTH
 
             SERVICE_LOGI("Webserver  Started");
@@ -647,14 +674,12 @@ service_Status_t service_webserver_SetAuth(const char *username, const char *pas
 
 bool service_webserver_IsSocketConnected(void)
 {
-    const char *msg = "";
-    if (SendWsFrame(gServerCtx.socket.req, msg, 0))
+    if (gServerCtx.server && gServerCtx.socket.fd >= 0)
     {
         return true;
     }
     else
     {
-        gServerCtx.socket.req = NULL;
         return false;
     }
 }
@@ -663,19 +688,70 @@ service_Status_t service_webserver_Send(const char *msg, uint16_t len)
 {
     if (msg && len > 0)
     {
-        if (SendWsFrame(gServerCtx.socket.req, msg, len))
+        httpd_ws_frame_t ws_pkt;
+        (void)memset(&ws_pkt, '\0', sizeof(httpd_ws_frame_t));
+        ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+        ws_pkt.payload = (uint8_t *)msg;
+        ws_pkt.len = len;
+
+        if (httpd_ws_send_frame(gServerCtx.socket.req, &ws_pkt) == ESP_OK)
         {
-            SERVICE_LOGD("Sent message: %s", msg);
             return SERVICE_STATUS_OK;
         }
         else
         {
-            gServerCtx.socket.req = NULL;
-            SERVICE_LOGE(" %d : FAILED TO SEND MESSAGE", __LINE__);
+            SERVICE_LOGE(" %d : FAILD TO SEND FRAME", __LINE__);
         }
     }
     return SERVICE_STATUS_ERROR;
 }
+
+service_Status_t service_webserver_SendAsync(const char *msg, uint16_t len)
+{
+    if (!msg && len == 0)
+    {
+        return SERVICE_STATUS_ERROR;
+    }
+
+    if (len > SERVICE_WEBSERVER_TX_BUFFER)
+    {
+        SERVICE_LOGE(" %d : MSG IS TOO LONG", __LINE__);
+        return SERVICE_STATUS_ERROR;
+    }
+
+    if (gServerCtx.server == NULL || gServerCtx.socket.fd < 0)
+    {
+        SERVICE_LOGE(" %d : SOCKET DISCONNECTED", __LINE__);
+        return SERVICE_STATUS_ERROR;
+    }
+    else
+    {
+        (void)memset(gServerCtx.socket.txBuff, '\0', sizeof(gServerCtx.socket.txBuff));
+        (void)memcpy(gServerCtx.socket.txBuff, msg, len);
+
+        service_webserver_AsyncResp_t *pArg = malloc(sizeof(service_webserver_AsyncResp_t));
+        if (pArg == NULL)
+        {
+            SERVICE_LOGE(" %d : NO MEMORY", __LINE__);
+            return SERVICE_STATUS_ERROR;
+        }
+
+        pArg->hd = gServerCtx.server;
+        pArg->fd = gServerCtx.socket.fd;
+        pArg->buff = gServerCtx.socket.txBuff;
+        pArg->len = len;
+
+        if (httpd_queue_work(gServerCtx.server, SendAsyncFrame, pArg) != ESP_OK)
+        {
+            free(pArg);
+            return SERVICE_STATUS_ERROR;
+        }
+
+        return SERVICE_STATUS_OK;
+    }
+}
+
+service_Status_t service_webserver_SendAsync(const char *msg, uint16_t len);
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
