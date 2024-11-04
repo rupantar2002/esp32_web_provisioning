@@ -25,11 +25,11 @@
 
 #define INTF_WIFI_MAX_ACTIVE_SCAN_TIME 150
 
-#define INTF_WIFI_MIN_ACTIVE_SCAN_TIME 120
+#define INTF_WIFI_MIN_ACTIVE_SCAN_TIME 50
 
-#define INTF_WIFI_PASSIVE_SCAN_TIME 200
+#define INTF_WIFI_PASSIVE_SCAN_TIME 360
 
-#define INTF_WIFI_SHOW_HIDDEN  1
+#define INTF_WIFI_SHOW_HIDDEN  0
 
 #define INTF_WIFI_FAST_SCAN  0
 
@@ -115,7 +115,7 @@ typedef struct
 
 typedef struct
 {
-    uint8_t *ssid;   /**< SSID of AP */
+    char *ssid;   /**< SSID of AP */
     uint8_t channel; /**< channel, scan the specific channel */
     bool passive;    /**< scan type, active or passive */
     bool blocking;

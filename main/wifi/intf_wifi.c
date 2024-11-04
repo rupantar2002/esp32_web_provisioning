@@ -595,16 +595,28 @@ intf_wifi_Status_t intf_wifi_StartScanning(intf_wifi_ScanParams_t *pParams)
 {
     if (pParams)
     {
+
         wifi_scan_config_t scanCfg = {
-            .ssid = pParams->ssid,
+            .ssid = (uint8_t *)pParams->ssid,
+            .bssid = 0,
             .channel = pParams->channel,
             .show_hidden = INTF_WIFI_SHOW_HIDDEN,
             .scan_type = (pParams->passive ? WIFI_SCAN_TYPE_PASSIVE : WIFI_SCAN_TYPE_ACTIVE),
-            .scan_time.active.min = INTF_WIFI_MIN_ACTIVE_SCAN_TIME,
-            .scan_time.active.max = INTF_WIFI_MAX_ACTIVE_SCAN_TIME,
-            .scan_time.passive = INTF_WIFI_PASSIVE_SCAN_TIME,
-            .home_chan_dwell_time = 100U, /* 100 ms is generally enough; lower values may reduce scan time but increase missed results.*/
         };
+
+        if (pParams->passive)
+        {
+            scanCfg.scan_time.passive = INTF_WIFI_PASSIVE_SCAN_TIME;
+        }
+
+        // scanCfg.ssid = (uint8_t *)pParams->ssid;
+        // scanCfg.channel = pParams->channel;
+        // scanCfg.show_hidden = INTF_WIFI_SHOW_HIDDEN;
+        // scanCfg.scan_type = (pParams->passive ? WIFI_SCAN_TYPE_PASSIVE : WIFI_SCAN_TYPE_ACTIVE);
+        // scanCfg.scan_time.active.min = INTF_WIFI_MIN_ACTIVE_SCAN_TIME;
+        // scanCfg.scan_time.active.max = INTF_WIFI_MAX_ACTIVE_SCAN_TIME;
+        // scanCfg.scan_time.passive = INTF_WIFI_PASSIVE_SCAN_TIME;
+        // scanCfg.home_chan_dwell_time = 100U, /* 100 ms is generally enough; lower values may reduce scan time but increase missed results.*/
 
         if (esp_wifi_scan_start(&scanCfg, pParams->blocking) == ESP_OK) // TODO scanning params
         {
