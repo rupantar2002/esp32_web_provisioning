@@ -12,17 +12,26 @@
 #include "service_webserver.h"
 #include "app_webserver.h"
 
-typedef enum
-{
-    EVENT_NULL = -1,
-    EVENT_START_SCAN = ((1UL << 0UL)),
-    EVENT_STOP_SCAN = ((1UL << 1UL)),
-    EVENT_PROVISION = ((1UL << 1UL)),
-} Event_t;
+// typedef enum
+// {
+//     EVENT_NULL = -1,
+//     EVENT_START_SCAN = ((1UL << 0UL)),
+//     EVENT_STOP_SCAN = ((1UL << 1UL)),
+//     EVENT_PROVISION = ((1UL << 1UL)),
+// } Event_t;
 
 static const char *TAG = "MAIN";
 
-static EventGroupHandle_t gEventGroup = NULL;
+static intf_wifi_ScanParams_t gScanParams = {
+    .blocking = false,
+    .channel = INTF_WIFI_DEFAULT_CHANNEL,
+    .passive = false,
+    .ssid = 0,
+};
+
+static app_webserver_ResponceData_t gResponceData = {0};
+
+// static EventGroupHandle_t gEventGroup = NULL;
 
 /**
  * \brief Initalize NVS flash,netif and default event loop.
@@ -83,14 +92,13 @@ void app_main(void)
 {
 
     // define a variable which holds the state of events
-    const EventBits_t bitsToWaitFor = (EVENT_START_SCAN | EVENT_STOP_SCAN | EVENT_PROVISION);
-    EventBits_t eventGroupValue;
+    // const EventBits_t bitsToWaitFor = (EVENT_START_SCAN | EVENT_STOP_SCAN | EVENT_PROVISION);
+    // EventBits_t eventGroupValue;
 
-    gEventGroup = xEventGroupCreate();
-    configASSERT(gEventGroup);
+    // gEventGroup = xEventGroupCreate();
+    // configASSERT(gEventGroup);
 
     SystemInit();
-
 
     intf_wifi_IpInfo_t ipInfo = {
         .ip = INTF_WIFI_IPV4(10, 10, 10, 10),
@@ -100,34 +108,33 @@ void app_main(void)
 
     intf_wifi_Init();
 
-    intf_wifi_Start();
-
     intf_wifi_SetMode(INTF_WIFI_MODE_APSTA);
 
     intf_wifi_SetIpInfo(&ipInfo);
 
+    intf_wifi_Start();
 
-    while (true)
-    {
-        eventGroupValue = xEventGroupWaitBits(gEventGroup,
-                                              bitsToWaitFor,
-                                              pdTRUE,
-                                              pdTRUE,
-                                              portMAX_DELAY);
+    // while (true)
+    // {
+    //     eventGroupValue = xEventGroupWaitBits(gEventGroup,
+    //                                           bitsToWaitFor,
+    //                                           pdTRUE,
+    //                                           pdTRUE,
+    //                                           portMAX_DELAY);
 
-        if ((eventGroupValue & EVENT_START_SCAN) != 0)
-        {
-            ESP_LOGI(TAG, "EVENT_START_SCAN");
-        }
-        if ((eventGroupValue & EVENT_STOP_SCAN) != 0)
-        {
-            ESP_LOGI(TAG, "EVENT_STOP_SCAN");
-        }
-        if ((eventGroupValue & EVENT_PROVISION) != 0)
-        {
-            ESP_LOGI(TAG, "EVENT_PROVISION");
-        }
-    }
+    //     if ((eventGroupValue & EVENT_START_SCAN) != 0)
+    //     {
+    //         ESP_LOGI(TAG, "EVENT_START_SCAN");
+    //     }
+    //     if ((eventGroupValue & EVENT_STOP_SCAN) != 0)
+    //     {
+    //         ESP_LOGI(TAG, "EVENT_STOP_SCAN");
+    //     }
+    //     if ((eventGroupValue & EVENT_PROVISION) != 0)
+    //     {
+    //         ESP_LOGI(TAG, "EVENT_PROVISION");
+    //     }
+    // }
 }
 
 void intf_wifi_EventCallback(intf_wifi_Event_t event,
@@ -205,7 +212,12 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
                 ESP_LOGI(TAG, "wps : %d", pData->scanList.records[i].wps);
                 ESP_LOGI(TAG, "\n");
             }
+            (void)memset(&gResponceData, 0, sizeof(gResponceData));
+            gResponceData.scanlist.count = pData->scanList.count;
+            gResponceData.scanlist.records = pData->scanList.records;
+            (void)app_webserver_SendResponce(APP_WEBSERVER_REPONCE_SCANLIST, &gResponceData);
         }
+
         // intf_wifi_DestroyScanList();
         break;
 
@@ -247,15 +259,19 @@ service_Status_t service_webserver_EventCallback(service_webserver_Event_t event
                 (void)strncpy(cred.pass, usrData->reqData.provsn.pass, sizeof(cred.pass));
                 (void)intf_wifi_SetCredentials(INTF_WIFI_MODE_STA, &cred);
                 (void)intf_wifi_Connect();
-
+                break;
+            case APP_WEBSERVER_REQUEST_SCAN_START:
+                (void)intf_wifi_StartScanning(&gScanParams);
+                break;
+            case APP_WEBSERVER_REQUEST_SCAN_STOP:
+                (void)intf_wifi_StopScanning();
                 break;
             default:
                 break;
             }
         }
 
-        app_webserver_CreateResponce(APP_WEBSERVER_REPONCE_SCANLIST);
-        status = service_webserver_Send((const char *)pData->userBase.data, pData->userBase.len);
+        // status = service_webserver_Send((const char *)pData->userBase.data, pData->userBase.len);
 
         break;
     default:

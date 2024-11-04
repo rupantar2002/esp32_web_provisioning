@@ -54,6 +54,18 @@ const service_webserver_UserBase_t *service_webserver_ParseUserData(const servic
         }
         else if (strcmp("scan", type->valuestring) == 0)
         {
+            cJSON *action = cJSON_GetObjectItemCaseSensitive(reqJson, "action");
+
+            if (cJSON_IsString(action) && action->valuestring != NULL)
+            {
+                gUserData.req = APP_WEBSERVER_REQUEST_SCAN_START;
+                SERVICE_LOGD("Scan request : {action: %s}",
+                             action->valuestring);
+            }
+            else
+            {
+                SERVICE_LOGE(" %d : INVALID SCANNING REQUEST", __LINE__);
+            }
         }
         else
         {
@@ -78,7 +90,83 @@ end:
     return &gUserData.super;
 }
 
-void app_webserver_CreateResponce(app_webserver_Responce_t resp)
+app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
+                                        const app_webserver_ResponceData_t *pData)
 {
-    SERVICE_LOGI("Responce created");
+    SERVICE_LOGD("%s start ", __func__);
+
+    app_Status_t status = APP_STATUS_OK;
+    char *string = NULL;
+    cJSON *responce = NULL;
+
+    switch (resp)
+    {
+    case APP_WEBSERVER_REPONCE_SCANLIST:
+    {
+
+        cJSON *networks = NULL;
+        cJSON *network = NULL;
+        uint16_t index = 0;
+
+        responce = cJSON_CreateObject();
+        if (responce == NULL)
+        {
+            goto end;
+        }
+
+        if (cJSON_AddStringToObject(responce, "type", "scanlist") == NULL)
+        {
+            goto end;
+        }
+
+        networks = cJSON_AddArrayToObject(responce, "networks");
+        if (networks == NULL)
+        {
+            goto end;
+        }
+
+        for (index = 0; index < pData->scanlist.count; ++index)
+        {
+            network = cJSON_CreateObject();
+
+            if (cJSON_AddStringToObject(network, "ssid", (const char *)pData->scanlist.records[index].ssid) == NULL)
+            {
+                goto end;
+            }
+
+            if (cJSON_AddNumberToObject(network,"rssi",pData->scanlist.records[index].rssi) == NULL)
+            {
+                goto end;
+            }
+
+            if (cJSON_AddBoolToObject(network,"open",(pData->scanlist.records[index].authMode == INTF_WIFI_AUTH_OPEN)) == NULL)
+            {
+                goto end;
+            }
+
+            cJSON_AddItemToArray(networks,network);
+        }
+        break;
+    }
+
+    default:
+        break;
+    }
+    SERVICE_LOGD("%s before print ", __func__);
+
+    string = cJSON_Print(responce);
+    if (string == NULL)
+    {
+        SERVICE_LOGE(" %d : Failed to print responce (type : %d)", __LINE__, resp);
+    }
+    else
+    {
+        SERVICE_LOGD("resp : '%s'", string);
+        (void)service_webserver_SendAsync(string,strlen(string));
+    }
+
+end:
+    cJSON_Delete(responce);
+    SERVICE_LOGD("%s end ", __func__);
+    return status;
 }
