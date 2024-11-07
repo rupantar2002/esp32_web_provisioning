@@ -54,18 +54,7 @@ const service_webserver_UserBase_t *service_webserver_ParseUserData(const servic
         }
         else if (strcmp("scan", type->valuestring) == 0)
         {
-            cJSON *action = cJSON_GetObjectItemCaseSensitive(reqJson, "action");
-
-            if (cJSON_IsString(action) && action->valuestring != NULL)
-            {
-                gUserData.req = APP_WEBSERVER_REQUEST_SCAN_START;
-                SERVICE_LOGD("Scan request : {action: %s}",
-                             action->valuestring);
-            }
-            else
-            {
-                SERVICE_LOGE(" %d : INVALID SCANNING REQUEST", __LINE__);
-            }
+            gUserData.req = APP_WEBSERVER_REQUEST_SCAN_START;
         }
         else
         {
@@ -114,7 +103,7 @@ app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
             goto end;
         }
 
-        if (cJSON_AddStringToObject(responce, "type", "scanlist") == NULL)
+        if (cJSON_AddStringToObject(responce, "type", "scan") == NULL)
         {
             goto end;
         }
@@ -134,17 +123,17 @@ app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
                 goto end;
             }
 
-            if (cJSON_AddNumberToObject(network,"rssi",pData->scanlist.records[index].rssi) == NULL)
+            if (cJSON_AddNumberToObject(network, "rssi", pData->scanlist.records[index].rssi) == NULL)
             {
                 goto end;
             }
 
-            if (cJSON_AddBoolToObject(network,"open",(pData->scanlist.records[index].authMode == INTF_WIFI_AUTH_OPEN)) == NULL)
+            if (cJSON_AddBoolToObject(network, "open", (pData->scanlist.records[index].authMode == INTF_WIFI_AUTH_OPEN)) == NULL)
             {
                 goto end;
             }
 
-            cJSON_AddItemToArray(networks,network);
+            cJSON_AddItemToArray(networks, network);
         }
         break;
     }
@@ -154,15 +143,16 @@ app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
     }
     SERVICE_LOGD("%s before print ", __func__);
 
-    string = cJSON_Print(responce);
-    if (string == NULL)
+    string = cJSON_PrintUnformatted(responce); // TODO Use JSON_PrintPreallocated();
+
+    if (!string)
     {
         SERVICE_LOGE(" %d : Failed to print responce (type : %d)", __LINE__, resp);
     }
     else
     {
         SERVICE_LOGD("resp : '%s'", string);
-        (void)service_webserver_SendAsync(string,strlen(string));
+        (void)service_webserver_SendAsync(string, strlen(string));
     }
 
 end:

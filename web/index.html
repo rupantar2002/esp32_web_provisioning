@@ -3,111 +3,100 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <button id="btn_scan" onclick="scanNetworks()">Scan start</button> <br />
-    <div id="container_scanlist">Scan list</div>
-    <br />
-    <label for="input_ssid">SSID</label>
-    <input id="input_ssid" type="text" maxlength="32" /><br />
-    <label for="input_pass">PASSWORD</label>
-    <input id="input_pass" type="text" maxlength="64" /><br />
-    <button onclick="provision(true)">Connect</button>
-    <p>
-      Lorem ipsum dolor sit amet consectetur adipisicing elit. Pariatur rem,
-      quae maxime accusamus temporibus voluptatum provident asperiores incidunt
-      repudiandae optio ipsa non quibusdam blanditiis necessitatibus. Ea
-      pariatur voluptatibus illum perferendis.
-    </p>
+
+    <!-- Full-Screen Loader Overlay -->
+    <div id="loader-overlay">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Authentication Modal -->
+    <div id="auth-model" class="model" >
+      <div class="model-content">
+        <h3>User Authentication</h3>
+        <label>Username</label>
+        <input
+          type="text"
+          id="auth-user"
+          maxlength="24"
+          required
+        /><br /><br />
+        <label>Password</label>
+        <input
+          type="password"
+          id="auth-pass"
+          maxlength="24"
+          required
+        /><br /><br />
+        <button onclick="authenticateUser()">Authenticate</button>
+      </div>
+    </div>
+
+
+    <div id="root-container" style="display: none">
+      <h2>Device Management Portal</h2>
+      <!-- Navigation tabs -->
+      <div class="tab">
+        <button class="tablinks" onclick="openTab(event, 'Provisioning')">
+          Provisioning
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'OTA')">OTA</button>
+        <button class="tablinks" onclick="openTab(event, 'DummyData')">
+          Dummy Data
+        </button>
+      </div>
+
+      <!-- Provisioning Tab -->
+      <div id="Provisioning" class="tabcontent">
+        <div class="container">
+          <h3>Wi-Fi Provisioning</h3>
+          <button onclick="startScan()">Scan for Networks</button>
+          <ul id="scanlist"></ul>
+          <label>SSID</label>
+          <input type="text" id="ssid-container"/><br />
+          <label>Password</label>
+          <input type="password" id="pass-container" /><br />
+          <button onclick="startProvsn()">Connect</button>
+          <div>
+            Connection Status:
+            <span id="connection-status" class="status-indicator"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- OTA Tab -->
+      <div id="OTA" class="tabcontent">
+        <h3>OTA Firmware Update</h3>
+        <div class="container">
+          <input type="file" id="ota-file" accept=".bin" />
+          <button onclick="startOTA()">Upload</button>
+          <div id="ota-status"></div>
+        </div>
+      </div>
+
+      <!-- Dummy Data Tab -->
+      <div id="DummyData" class="tabcontent">
+        <h3>Dummy Data Inputs</h3>
+        <div class="container">
+          <label class="output-header" id="previousNumber"
+            >Previous Number: 0</label
+          >
+          <label class="output-header" id="headerNumber">Number Output: </label>
+          <input type="number" id="inputNumber" /><br />
+          <button onclick="setNewValue('number')">Set Value</button><br /><br />
+
+          <label class="output-header" id="previousText"
+            >Previous Text: N/A</label
+          >
+          <label class="output-header" id="headerText">Text Output: </label>
+          <input type="text" id="inputText" /><br />
+          <button onclick="setNewValue('text')">Set Value</button>
+        </div>
+      </div>
+    </div>
+    </div>
+    <script src="script.js"></script>
   </body>
-  <script>
-    const socket = new WebSocket("/ws");
-    let connected = false;
-    let scanStart = false;
-
-    socket.onopen = function (event) {
-      console.log("Connected to WebSocket server");
-      connected = true;
-    };
-
-    socket.onmessage = function (event) {
-      console.log("Message from server:", event.data);
-    };
-
-    socket.onclose = function (event) {
-      console.log("Disconnected from WebSocket server");
-      connected = false;
-    };
-
-    socket.onerror = function (error) {
-      console.error("WebSocket error:", error);
-    };
-
-    function sendData() {
-      if (connected) {
-        const inputText = document.getElementById("text_input");
-        console.log(inputText.value);
-        socket.send(inputText.value);
-      } else {
-        console.log("socket not connected");
-      }
-    }
-
-    function provision(open) {
-      const ssid = document.getElementById("input_ssid").value;
-      const pass = document.getElementById("input_pass").value;
-      if (!ssid) {
-        alert("Enter valid ssid");
-        return;
-      }
-
-      if (!pass && !open) {
-        alert("Network is peotected,Enter valid passsword");
-        return;
-      }
-
-      // log resuest data
-      console.log(
-        "connection requested { ssid : " + ssid + " , pass : " + pass + "}"
-      );
-
-      const req = createRequest("prvsn", {
-        ssid: ssid,
-        pass: pass,
-      });
-
-      socket.send(JSON.stringify(req));
-    }
-
-    function scanNetworks() {
-      const act = scanStart ? "stop" : "start";
-      const req = createRequest("scan", {
-        action: act,
-      });
-
-      socket.send(JSON.stringify(req));
-      scanStart = !scanStart;
-    }
-
-    function createRequest(type, data) {
-      let request = { type };
-
-      switch (type) {
-        case "scan":
-          request.action = data.action; // 'start' or 'stop'
-          break;
-
-        case "prvsn":
-          request.ssid = data.ssid;
-          request.pass = data.pass;
-          break;
-
-        default:
-          throw new Error(`Unknown request type: ${type}`);
-      }
-      console.log(`Request Type: ${type}`, request);
-      return request;
-    }
-  </script>
 </html>

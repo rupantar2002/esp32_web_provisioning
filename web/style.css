@@ -114,15 +114,16 @@ input[type="file"] {
   height: 100%;
   transition: width 0.3s;
 }
-.strong-signal {
+
+.sig-strong {
   background-color: #5adb69;
-} /* Green for strong */
-.moderate-signal {
+} 
+.sig-moderate {
   background-color: #ffcc00;
-} /* Yellow for moderate */
-.weak-signal {
+}
+.sig-weak {
   background-color: #e36a64;
-} /* Red for weak */
+} 
 
 /* Buttons */
 button {
@@ -170,7 +171,7 @@ button:hover {
 }
 
 /* Modal styling */
-.modal {
+.model {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -183,7 +184,7 @@ button:hover {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-.modal-content {
+.model-content {
   background-color: white;
   padding: 20px;
   border-radius: 8px;

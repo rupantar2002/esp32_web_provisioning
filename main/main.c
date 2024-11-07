@@ -12,14 +12,6 @@
 #include "service_webserver.h"
 #include "app_webserver.h"
 
-// typedef enum
-// {
-//     EVENT_NULL = -1,
-//     EVENT_START_SCAN = ((1UL << 0UL)),
-//     EVENT_STOP_SCAN = ((1UL << 1UL)),
-//     EVENT_PROVISION = ((1UL << 1UL)),
-// } Event_t;
-
 static const char *TAG = "MAIN";
 
 static intf_wifi_ScanParams_t gScanParams = {
@@ -146,7 +138,7 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
     case INTF_WIFI_EVENT_AP_STARTED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STARTED", __LINE__, __func__);
         service_webserver_Start();
-        service_webserver_SetAuth("user1234567890123456789", "P@ssw0rd_12345678901234");
+        // service_webserver_SetAuth("user1234567890123456789", "P@ssw0rd_12345678901234");
         break;
     case INTF_WIFI_EVENT_AP_STOPED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_AP_STOPED", __LINE__, __func__);
