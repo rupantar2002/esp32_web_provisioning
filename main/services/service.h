@@ -42,8 +42,11 @@ typedef uint8_t service_Status_t;
 
 #define SERVICE_LOGE(fmt, ...) ESP_LOGE(TAG, fmt, ##__VA_ARGS__)
 
-#define SERVICE_LOGD(fmt, ...) ESP_LOGW(TAG, fmt, ##__VA_ARGS__)
+#define SERVICE_LOGW(fmt, ...) ESP_LOGW(TAG, fmt, ##__VA_ARGS__)
 
 #define SERVICE_LOGI(fmt, ...) ESP_LOGI(TAG, fmt, ##__VA_ARGS__)
+
+#define SERVICE_LOGD(fmt, ...) ESP_LOGW(TAG, fmt, ##__VA_ARGS__)
+
 
 #endif //__SERVICE_H__
