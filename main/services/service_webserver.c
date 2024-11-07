@@ -337,17 +337,10 @@ static esp_err_t GenericGetHandler(httpd_req_t *req)
         ssize_t len = fileInfo->stop - fileInfo->start;
         len -= 1; // remove null charecter from responce
         errCode = httpd_resp_send(req, fileInfo->start, len);
-
-        if (errCode != ESP_OK)
-        {
-            SERVICE_LOGE(" %d : FAILED TO SEND CHUNK", __LINE__);
-            return errCode;
-        }
     }
     else
     {
         errCode = httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "failed to send");
-        return errCode;
     }
     return errCode;
 }
@@ -363,12 +356,11 @@ static esp_err_t GenericPostHandler(httpd_req_t *req)
 
 static bool CreateDigest(void)
 {
-
     int rc;
     size_t out;
     char tempBuff[SERVICE_WEBSERVER_MAX_USERNAME + SERVICE_WEBSERVER_MAX_PASSWORD + 2];
-    /* Clear user info buffer */
 
+    /* Clear user info buffer */
     (void)memset(tempBuff, '\0', sizeof(tempBuff));
 
     /* Create user info */
@@ -376,9 +368,9 @@ static bool CreateDigest(void)
                   sizeof(tempBuff),
                   "%s:%s", gServerCtx.auth.user,
                   gServerCtx.auth.pass);
-    if (rc <= 0)
+    if (rc < 0 || rc > sizeof(tempBuff))
     {
-        ESP_LOGE(TAG, " %d : USER INFO TOO LONG", __LINE__);
+        ESP_LOGE(TAG, " %d : TEMP BUFFER OVERFLOW", __LINE__);
         return false;
     }
 
@@ -403,7 +395,7 @@ static bool CreateDigest(void)
 static esp_err_t BasicAuthHandler(httpd_req_t *req)
 {
     SERVICE_LOGD("'Authentication' Handler called");
-    size_t len = 0;
+    int len = 0;
     char *resp = NULL;
 
     /* clear header buffer */
@@ -437,19 +429,26 @@ static esp_err_t BasicAuthHandler(httpd_req_t *req)
 
             if (strncmp(gServerCtx.auth.digest, gServerCtx.auth.hdrBuff, len) == 0)
             {
-                SERVICE_LOGD("Authenticated!");
+                SERVICE_LOGI("Authenticated!");
                 (void)httpd_resp_set_status(req, HTTPD_200);
 
-                /* clear tempBuff buffer ,reuse it for responce */
-                static char tempBuff[100]; // TODO remove
-                (void)snprintf(tempBuff,
-                               sizeof(tempBuff),
+                /* Reuse hdrBuff for auth responce */
+                memset(gServerCtx.auth.hdrBuff, '\0', sizeof(gServerCtx.auth.hdrBuff));
+
+                len = snprintf(gServerCtx.auth.hdrBuff,
+                               sizeof(gServerCtx.auth.hdrBuff),
                                "{\"authenticated\": true,\"user\": \"%s\"}",
                                gServerCtx.auth.user);
-
-                /* set responce parameters */
-                resp = tempBuff;
-                len = strlen(resp);
+                if (len < 0 || len > sizeof(gServerCtx.auth.hdrBuff))
+                {
+                    SERVICE_LOGE(" %d : AUTH RESP BUFFER OVERFLOW", __LINE__);
+                }
+                else
+                {
+                    /* set responce parameters */
+                    resp = gServerCtx.auth.hdrBuff;
+                    len = strlen(resp);
+                }
             }
             else
             {
@@ -517,11 +516,8 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req)
         /* callback */
         (void)memset(&gServerCtx.eventData, '\0', sizeof(gServerCtx.eventData));
         gServerCtx.eventData.socketConn.connected = true;
-        if (service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_SOCKET_CONN,
-                                            &gServerCtx.eventData) != SERVICE_STATUS_OK)
-        {
-            SERVICE_LOGE("'SERVICE_WEBSERVER_EVENT_SOCKET_CONN' status 'Negetive' ");
-        }
+        service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_SOCKET_CONN,
+                                        &gServerCtx.eventData);
 
         return ESP_OK;
     }
@@ -567,15 +563,13 @@ static esp_err_t GenericSocketHandler(httpd_req_t *req)
         if (!dest)
         {
             SERVICE_LOGE(" %d : FAILED TO PARSE USER DATA", __LINE__);
+            // TODO send responce to server
         }
         else
         {
             /* callback */
-            if (service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_USER,
-                                                (service_webserver_EventData_t *)dest) != SERVICE_STATUS_OK)
-            {
-                SERVICE_LOGE("Event Status Negetive 'SERVICE_WEBSERVER_EVENT_USER' ");
-            }
+            service_webserver_EventCallback(SERVICE_WEBSERVER_EVENT_USER,
+                                            (service_webserver_EventData_t *)dest);
         }
     }
     else
@@ -755,8 +749,8 @@ service_Status_t service_webserver_SendAsync(const char *msg, uint16_t len);
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
-__attribute__((__weak__)) service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
-                                                                           service_webserver_EventData_t const *const pData)
+__attribute__((__weak__)) void service_webserver_EventCallback(service_webserver_Event_t event,
+                                                               service_webserver_EventData_t const *const pData)
 {
     SERVICE_LOGD(" Default Event Function ");
     (void)event;
@@ -764,7 +758,7 @@ __attribute__((__weak__)) service_Status_t service_webserver_EventCallback(servi
     return SERVICE_STATUS_OK;
 }
 
-__attribute__((__weak__)) const service_webserver_UserBase_t *service_webserver_ParseUserData(const service_webserver_UserBase_t *src)
+__attribute__((__weak__)) const service_webserver_UserBase_t *service_webserver_ParseUserData(service_webserver_UserBase_t const *const src)
 {
     SERVICE_LOGD(" Default Parser Function ");
     return src;

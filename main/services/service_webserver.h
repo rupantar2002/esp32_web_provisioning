@@ -77,9 +77,9 @@ service_Status_t service_webserver_SendAsync(const char *msg, uint16_t len);
 
 #endif // SERVICE_WEBSERVER_USE_WEBSOCKET
 
-service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
+void service_webserver_EventCallback(service_webserver_Event_t event,
                                                  service_webserver_EventData_t const *const pData);
 
-const service_webserver_UserBase_t *service_webserver_ParseUserData(const service_webserver_UserBase_t *src);
+const service_webserver_UserBase_t *service_webserver_ParseUserData(service_webserver_UserBase_t const *const src);
 
 #endif //__SERVICE_WEBSERVER_H__
