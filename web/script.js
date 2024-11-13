@@ -176,9 +176,7 @@ function createRequest(type, data) {
 /*-----------------Responce Handlers--------------*/
 function handleScanResp(data) {
   const listElm = document.getElementById('scanlist')
-  listElm.innerHTML = '' // Clear any previous content
-
-  // Loop through each network and create HTML for it
+  listElm.innerHTML = ''
   data.networks.forEach((network) => {
     const item = document.createElement('li')
     item.className = 'network-item'
@@ -201,4 +199,6 @@ function handleScanResp(data) {
     listElm.appendChild(item)
   })
 }
+
+
 /*------------------------------------------------*/

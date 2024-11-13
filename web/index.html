@@ -6,23 +6,17 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-
     <!-- Full-Screen Loader Overlay -->
     <div id="loader-overlay">
       <div class="spinner"></div>
     </div>
 
     <!-- Authentication Modal -->
-    <div id="auth-model" class="model" >
+    <div id="auth-model" class="model" style="display: none">
       <div class="model-content">
         <h3>User Authentication</h3>
         <label>Username</label>
-        <input
-          type="text"
-          id="auth-user"
-          maxlength="24"
-          required
-        /><br /><br />
+        <input type="text" id="auth-user" maxlength="24" required /><br /><br />
         <label>Password</label>
         <input
           type="password"
@@ -34,17 +28,22 @@
       </div>
     </div>
 
-
-    <div id="root-container" style="display: none">
+    <div id="root-container" style="display: block">
       <h2>Device Management Portal</h2>
+
       <!-- Navigation tabs -->
       <div class="tab">
         <button class="tablinks" onclick="openTab(event, 'Provisioning')">
           Provisioning
         </button>
-        <button class="tablinks" onclick="openTab(event, 'OTA')">OTA</button>
-        <button class="tablinks" onclick="openTab(event, 'DummyData')">
-          Dummy Data
+        <button class="tablinks" onclick="openTab(event, 'CloudConfig')">
+          Cloud Config
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'Status')">
+          Status
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'Ota')">
+          Firmware Update
         </button>
       </div>
 
@@ -55,48 +54,72 @@
           <button onclick="startScan()">Scan for Networks</button>
           <ul id="scanlist"></ul>
           <label>SSID</label>
-          <input type="text" id="ssid-container"/><br />
+          <input type="text" id="ssid-container" /><br />
           <label>Password</label>
           <input type="password" id="pass-container" /><br />
-          <button onclick="startProvsn()">Connect</button>
-          <div>
-            Connection Status:
-            <span id="connection-status" class="status-indicator"></span>
+          <button onclick="startProvsn()">Connect</button><br /><br />
+        </div>
+      </div>
+
+      <!-- Cloud Config Tab -->
+      <div id="CloudConfig" class="tabcontent">
+        <h3>Mqtt Configuration</h3>
+        <div class="container">
+          <label>Client Id</label>
+          <input type="text" id="mqtt-client" />
+          <label>Host</label>
+          <input type="text" id="mqtt-host" />
+          <label>Port</label>
+          <input type="number" id="mqtt-port" />
+          <label>Username</label>
+          <input type="text" id="mqtt-user" />
+          <label>Password</label>
+          <input type="text" id="mqtt-pass" />
+          <label>Use Tls</label>
+          <input
+            type="radio"
+            id="mqtt-tls"
+            onchange="document.getElementById('mqtt-file').style.display='block'"
+          />
+          <br />
+          <br />
+          <div id="mqtt-file" style="display: none">
+            <label>Root CA</label>
+            <input type="file" id="mqtt-root-cert" accept=".crt" />
+            <label>Client Certificate</label>
+            <input type="file" id="mqtt-client-crt" accept=".crt" />
+            <label>Client Key</label>
+            <input type="file" id="mqtt-client-key" accept=".key" />
           </div>
+          <br />
+
+          <button onclick="updateCloudCfg()">UPDATE</button>
+        </div>
+      </div>
+
+      <!-- Status Tab -->
+      <div id="Status" class="tabcontent">
+        <h3>Device Staus</h3>
+        <div class="container">
+          <table>
+            <td id="status-conn">Wifi</td>
+            <td id="status-web">Internet</td>
+            <td id="status-mqtt">Mqtt</td>
+          </table>
         </div>
       </div>
 
       <!-- OTA Tab -->
-      <div id="OTA" class="tabcontent">
-        <h3>OTA Firmware Update</h3>
+      <div id="Ota" class="tabcontent">
+        <h3>Upload Firmware Binary</h3>
         <div class="container">
           <input type="file" id="ota-file" accept=".bin" />
           <button onclick="startOTA()">Upload</button>
           <div id="ota-status"></div>
         </div>
       </div>
-
-      <!-- Dummy Data Tab -->
-      <div id="DummyData" class="tabcontent">
-        <h3>Dummy Data Inputs</h3>
-        <div class="container">
-          <label class="output-header" id="previousNumber"
-            >Previous Number: 0</label
-          >
-          <label class="output-header" id="headerNumber">Number Output: </label>
-          <input type="number" id="inputNumber" /><br />
-          <button onclick="setNewValue('number')">Set Value</button><br /><br />
-
-          <label class="output-header" id="previousText"
-            >Previous Text: N/A</label
-          >
-          <label class="output-header" id="headerText">Text Output: </label>
-          <input type="text" id="inputText" /><br />
-          <button onclick="setNewValue('text')">Set Value</button>
-        </div>
-      </div>
     </div>
-    </div>
+
     <script src="script.js"></script>
   </body>
 </html>
