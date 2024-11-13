@@ -755,7 +755,6 @@ __attribute__((__weak__)) void service_webserver_EventCallback(service_webserver
     SERVICE_LOGD(" Default Event Function ");
     (void)event;
     (void)pData;
-    return SERVICE_STATUS_OK;
 }
 
 __attribute__((__weak__)) const service_webserver_UserBase_t *service_webserver_ParseUserData(service_webserver_UserBase_t const *const src)

@@ -13,8 +13,6 @@
 
 #define INTF_WIFI_MAX_CONNECTIONS 1 /*!< Maximum station connected to ap */
 
-#define INTF_WIFI_MAX_CONNECTION_RETRY 1 /*!< Maximum connection retry */
-
 #define INTF_WIFI_SCAN_ENABLE 1 /*!< Enable scaning */
 
 #define INTF_WIFI_SCAN_DISABLE 0 /*!< Disable scanning */
@@ -29,9 +27,9 @@
 
 #define INTF_WIFI_PASSIVE_SCAN_TIME 360
 
-#define INTF_WIFI_SHOW_HIDDEN  0
+#define INTF_WIFI_SHOW_HIDDEN 0
 
-#define INTF_WIFI_FAST_SCAN  0
+#define INTF_WIFI_FAST_SCAN 0
 
 #define INTF_WIFI_SCAN_LIST_ALLOC_STATIC 0 /*!< Static scanlist */
 
@@ -115,7 +113,7 @@ typedef struct
 
 typedef struct
 {
-    char *ssid;   /**< SSID of AP */
+    char *ssid;      /**< SSID of AP */
     uint8_t channel; /**< channel, scan the specific channel */
     bool passive;    /**< scan type, active or passive */
     bool blocking;
@@ -283,5 +281,6 @@ void intf_wifi_DestroyScanList(void);
 
 void intf_wifi_EventCallback(intf_wifi_Event_t event,
                              intf_wifi_EventData_t const *const pData);
+
 
 #endif //__INTF_WIFI_H__

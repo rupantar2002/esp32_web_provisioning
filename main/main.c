@@ -11,6 +11,16 @@
 #include "service.h"
 #include "service_webserver.h"
 #include "app_webserver.h"
+#include "app_connection.h"
+
+#define MAX_RECONNECTION_TIME 600U // 10 min = 10*60 sec
+#define RECONNECTION_FACTOR 2U
+
+typedef struct
+{
+    uint32_t backOffTime;
+    TimerHandle_t timer;
+} Reconnect_t;
 
 static const char *TAG = "MAIN";
 
@@ -77,7 +87,7 @@ static void SystemInit(void)
 }
 
 /**
- * \brief Entry point for any application.
+ * \brief Entry point for any idf application.
  *
  */
 void app_main(void)
@@ -98,6 +108,8 @@ void app_main(void)
         .netmask = INTF_WIFI_IPV4(255, 255, 255, 0),
     };
 
+    // app_connection_Init();
+
     intf_wifi_Init();
 
     intf_wifi_SetMode(INTF_WIFI_MODE_APSTA);
@@ -105,6 +117,15 @@ void app_main(void)
     intf_wifi_SetIpInfo(&ipInfo);
 
     intf_wifi_Start();
+
+    // intf_wifi_Cred_t cred = {
+    //     .ssid = "Nothing",
+    //     .pass = "12345678",
+    // };
+
+    // intf_wifi_SetCredentials(INTF_WIFI_MODE_STA, &cred);
+
+    // intf_wifi_Connect();
 
     // while (true)
     // {
@@ -168,13 +189,21 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_STA_CONNECTED", __LINE__, __func__);
         ESP_LOGI(TAG, "ssid : \"%s\"", pData->staConnected.ssid);
         ESP_LOGI(TAG, "aid : \"%d\"", pData->staConnected.aid);
+        gResponceData.status = APP_STATUS_OK;
+        gResponceData.wifiConn.connected = true;
+        app_webserver_SendResponce(APP_WEBSERVER_REPONCE_WIFI_CONN, &gResponceData);
 
+        // app_connection_Stop();
         break;
     case INTF_WIFI_EVENT_STA_DISCONNECTED:
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_STA_DISCONNECTED", __LINE__, __func__);
         ESP_LOGI(TAG, "ssid : \"%s\"", pData->staDisconnected.ssid);
         ESP_LOGI(TAG, "reason : \"%d\"", pData->staDisconnected.reason);
+        // app_connection_Start();
 
+        gResponceData.status = APP_STATUS_OK;
+        gResponceData.wifiConn.connected = false;
+        app_webserver_SendResponce(APP_WEBSERVER_REPONCE_WIFI_CONN, &gResponceData);
         break;
     case INTF_WIFI_EVENT_STA_GOT_IP:
         break;
@@ -192,7 +221,10 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
         // }
         break;
     case INTF_WIFI_EVENT_SCAN_LIST:
+    {
         ESP_LOGI(TAG, " %d : %s : INTF_WIFI_EVENT_SCAN_LIST", __LINE__, __func__);
+        (void)memset(&gResponceData, 0, sizeof(gResponceData));
+
         if (pData->scanList.count > 0)
         {
             for (uint16_t i = 0; i < pData->scanList.count; i++) // TODO remove
@@ -204,15 +236,19 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
                 ESP_LOGI(TAG, "wps : %d", pData->scanList.records[i].wps);
                 ESP_LOGI(TAG, "\n");
             }
-            (void)memset(&gResponceData, 0, sizeof(gResponceData));
-            gResponceData.scanlist.count = pData->scanList.count;
-            gResponceData.scanlist.records = pData->scanList.records;
-            (void)app_webserver_SendResponce(APP_WEBSERVER_REPONCE_SCANLIST, &gResponceData);
+            gResponceData.status = APP_STATUS_OK;
+            gResponceData.scan.count = pData->scanList.count;
+            gResponceData.scan.records = pData->scanList.records;
+        }
+        else
+        {
+            gResponceData.status = APP_STATUS_ERROR;
         }
 
+        (void)app_webserver_SendResponce(APP_WEBSERVER_REPONCE_SCAN, &gResponceData);
         // intf_wifi_DestroyScanList();
         break;
-
+    }
     case INTF_WIFI_EVENT_MAX:
         break;
     default:
@@ -220,10 +256,10 @@ void intf_wifi_EventCallback(intf_wifi_Event_t event,
     }
 }
 
-service_Status_t service_webserver_EventCallback(service_webserver_Event_t event,
-                                                 service_webserver_EventData_t const *const pData)
+void service_webserver_EventCallback(service_webserver_Event_t event,
+                                     service_webserver_EventData_t const *const pData)
 {
-    service_Status_t status;
+
     switch (event)
     {
     case SERVICE_WEBSERVER_EVENT_USER:
@@ -232,8 +268,10 @@ service_Status_t service_webserver_EventCallback(service_webserver_Event_t event
         // ESP_LOGI(TAG, "len : %d", pData->userBase.len);
         // ESP_LOGI(TAG, "data :'%s'", pData->userBase.data);
 
+        /* Check is the base inherited bu application */
         if (pData->userBase.parent > 0)
         {
+            /* Retrive the container from the base */
             app_webserver_UserData_t *usrData = SERVICE_CONTAINER_OF(&pData->userBase,
                                                                      app_webserver_UserData_t, super);
             ESP_LOGI(TAG, " request_type : %d ", usrData->req);
@@ -241,6 +279,7 @@ service_Status_t service_webserver_EventCallback(service_webserver_Event_t event
             switch (usrData->req)
             {
             case APP_WEBSERVER_REQUEST_PROVSN:
+            {
                 ESP_LOGI(TAG, "provisioning Request :{ ssid: %s , pass: %s }",
                          usrData->reqData.provsn.ssid,
                          usrData->reqData.provsn.pass);
@@ -251,25 +290,30 @@ service_Status_t service_webserver_EventCallback(service_webserver_Event_t event
                 (void)strncpy(cred.pass, usrData->reqData.provsn.pass, sizeof(cred.pass));
                 (void)intf_wifi_SetCredentials(INTF_WIFI_MODE_STA, &cred);
                 (void)intf_wifi_Connect();
+
+                gResponceData.status = APP_STATUS_OK;
+                gResponceData.provsn.accepted = true;
+                (void)app_webserver_SendResponce(APP_WEBSERVER_REPONCE_PROVSN, &gResponceData);
+
                 break;
+            }
             case APP_WEBSERVER_REQUEST_SCAN_START:
-                (void)intf_wifi_StartScanning(&gScanParams);
+            {
+                /* Start scanning */
+                if (intf_wifi_StartScanning(&gScanParams) != INTF_WIFI_STATUS_OK)
+                {
+                    gResponceData.status = APP_STATUS_ERROR;
+                    (void)app_webserver_SendResponce(APP_WEBSERVER_REPONCE_SCAN, &gResponceData);
+                }
                 break;
-            case APP_WEBSERVER_REQUEST_SCAN_STOP:
-                (void)intf_wifi_StopScanning();
-                break;
+            }
             default:
                 break;
             }
         }
 
-        // status = service_webserver_Send((const char *)pData->userBase.data, pData->userBase.len);
-
         break;
     default:
-        status = SERVICE_STATUS_OK;
         break;
     }
-
-    return status;
 }

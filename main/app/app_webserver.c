@@ -82,26 +82,30 @@ end:
 app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
                                         const app_webserver_ResponceData_t *pData)
 {
-    SERVICE_LOGD("%s start ", __func__);
-
-    app_Status_t status = APP_STATUS_OK;
     char *string = NULL;
     cJSON *responce = NULL;
 
+    /* Create responce object */
+    responce = cJSON_CreateObject();
+    if (responce == NULL)
+    {
+        goto end;
+    }
+
+    /* Add Status to object */
+    if (cJSON_AddBoolToObject(responce, "status", (pData->status == APP_STATUS_OK)) == NULL)
+    {
+        goto end;
+    }
+
     switch (resp)
     {
-    case APP_WEBSERVER_REPONCE_SCANLIST:
+    case APP_WEBSERVER_REPONCE_SCAN:
     {
 
         cJSON *networks = NULL;
         cJSON *network = NULL;
         uint16_t index = 0;
-
-        responce = cJSON_CreateObject();
-        if (responce == NULL)
-        {
-            goto end;
-        }
 
         if (cJSON_AddStringToObject(responce, "type", "scan") == NULL)
         {
@@ -114,21 +118,21 @@ app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
             goto end;
         }
 
-        for (index = 0; index < pData->scanlist.count; ++index)
+        for (index = 0; index < pData->scan.count; ++index)
         {
             network = cJSON_CreateObject();
 
-            if (cJSON_AddStringToObject(network, "ssid", (const char *)pData->scanlist.records[index].ssid) == NULL)
+            if (cJSON_AddStringToObject(network, "ssid", (const char *)pData->scan.records[index].ssid) == NULL)
             {
                 goto end;
             }
 
-            if (cJSON_AddNumberToObject(network, "rssi", pData->scanlist.records[index].rssi) == NULL)
+            if (cJSON_AddNumberToObject(network, "rssi", pData->scan.records[index].rssi) == NULL)
             {
                 goto end;
             }
 
-            if (cJSON_AddBoolToObject(network, "open", (pData->scanlist.records[index].authMode == INTF_WIFI_AUTH_OPEN)) == NULL)
+            if (cJSON_AddBoolToObject(network, "open", (pData->scan.records[index].authMode == INTF_WIFI_AUTH_OPEN)) == NULL)
             {
                 goto end;
             }
@@ -137,17 +141,44 @@ app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
         }
         break;
     }
+    case APP_WEBSERVER_REPONCE_PROVSN:
+    {
+        if (cJSON_AddStringToObject(responce, "type", "provsn") == NULL)
+        {
+            goto end;
+        }
+
+        if (cJSON_AddBoolToObject(responce, "accepted", pData->provsn.accepted) == NULL)
+        {
+            goto end;
+        }
+        break;
+    }
+    case APP_WEBSERVER_REPONCE_WIFI_CONN:
+    {
+
+        if (cJSON_AddStringToObject(responce, "type", "wifi_conn") == NULL)
+        {
+            goto end;
+        }
+
+        if (cJSON_AddBoolToObject(responce, "connected", pData->wifiConn.connected) == NULL)
+        {
+            goto end;
+        }
+
+        break;
+    }
 
     default:
         break;
     }
-    SERVICE_LOGD("%s before print ", __func__);
 
     string = cJSON_PrintUnformatted(responce); // TODO Use JSON_PrintPreallocated();
 
     if (!string)
     {
-        SERVICE_LOGE(" %d : Failed to print responce (type : %d)", __LINE__, resp);
+        SERVICE_LOGE(" %d : Failed create responce json (type : %d)", __LINE__, resp);
     }
     else
     {
@@ -157,6 +188,5 @@ app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
 
 end:
     cJSON_Delete(responce);
-    SERVICE_LOGD("%s end ", __func__);
-    return status;
+    return APP_STATUS_OK; // TODO add valid status
 }

@@ -1,3 +1,6 @@
+const COLOR_OK = '#5adb69'
+const COLOR_ERR = '#e36a64'
+
 const loader = document.getElementById('loader-overlay')
 /* Ajax context */
 const xhr = new XMLHttpRequest()
@@ -6,6 +9,9 @@ const ws = new WebSocket('/ws')
 
 /* Timer handle */
 let timer = null
+
+/* Mqtt tls state */
+let mqttTls = false
 
 /* Open default tab */
 document.querySelector('.tab button').click()
@@ -18,12 +24,11 @@ ws.onmessage = function (evt) {
   console.log('Message from server:', evt.data)
   if (timer !== null) clearTimeout(timer) // stop timer
   hideLoader()
-
   let data
   try {
     data = JSON.parse(evt.data)
   } catch (e) {
-    console.error('Non-JSON message received:', evt.data)
+    console.error('invalid JSON received')
     return
   }
 
@@ -33,6 +38,9 @@ ws.onmessage = function (evt) {
       break
     case 'provsn':
       // handleConnResp(data)
+      break
+    case 'wifi_conn':
+      handleWifiConn(data.connected)
       break
     default:
       console.log('invalid responce')
@@ -86,30 +94,30 @@ function calculateWidth(rssi) {
 
 /* Handles user authentication */
 function authenticateUser() {
-  const user = document.getElementById("auth-user").value;
-  const pass = document.getElementById("auth-pass").value;
+  const user = document.getElementById('auth-user').value
+  const pass = document.getElementById('auth-pass').value
 
-  const auth = "Basic " + btoa(user + ":" + pass);
-  xhr.open("GET", '/auth', true);
-  xhr.setRequestHeader("Authorization", auth);
-  showLoader(); 
+  const auth = 'Basic ' + btoa(user + ':' + pass)
+  xhr.open('GET', '/auth', true)
+  xhr.setRequestHeader('Authorization', auth)
+  showLoader()
 
   xhr.onload = function () {
-    hideLoader(); // Hide loader after receiving the response
+    hideLoader() // Hide loader after receiving the response
     if (xhr.status === 200) {
       // Hide the authentication modal and show the main content
-      document.getElementById("auth-model").style.display = "none";
-      document.getElementById("root-container").style.display = "block";
+      document.getElementById('auth-model').style.display = 'none'
+      document.getElementById('root-container').style.display = 'block'
     } else {
-      confirm("Authentication failed.")
+      confirm('Authentication failed.')
     }
-  };
+  }
 
   xhr.onerror = function () {
-    hideLoader();
-      alert("Network error.");
-  };
-  xhr.send();
+    hideLoader()
+    alert('Network error.')
+  }
+  xhr.send()
 }
 
 /* Send scan request */
@@ -121,8 +129,8 @@ function startScan() {
 /* Send provisioning requset */
 function startProvsn(network) {
   console.log('provision called')
-  const pass= document.getElementById('pass-container').value
-  const ssid= document.getElementById('ssid-container').value
+  const pass = document.getElementById('pass-container').value
+  const ssid = document.getElementById('ssid-container').value
   if (!ssid) {
     alert('Enter valid ssid')
     return
@@ -133,8 +141,15 @@ function startProvsn(network) {
   ) {
     return
   }
-  createRequest('prvsn', { ssid: ssid, pass: pass })
+  const req = createRequest('prvsn', { ssid: ssid, pass: pass })
   sendMessage(req, 5)
+}
+
+function enableTls() {
+  mqttTls = !mqttTls
+  const elm = document.getElementById('mqtt-files')
+  if (mqttTls) elm.style.display = 'block'
+  else elm.style.display = 'none'
 }
 
 /* Send websocket message with timeout */
@@ -174,18 +189,19 @@ function createRequest(type, data) {
 }
 
 /*-----------------Responce Handlers--------------*/
+
 function handleScanResp(data) {
   const listElm = document.getElementById('scanlist')
+
   listElm.innerHTML = ''
   data.networks.forEach((network) => {
     const item = document.createElement('li')
     item.className = 'network-item'
-
     item.innerHTML = `
     <div class="network-info">
     <span class="network-ssid">${network.ssid}</span>
     </div>
-    <span class="network-icon">${network.open ? '🔒' : ''}</span>
+    <span class="network-icon">${network.open ? '' : '🔒'}</span>
     <div class="rssi-bar-container">
     <div class="rssi-bar ${getSigClass(
       network.rssi
@@ -200,5 +216,10 @@ function handleScanResp(data) {
   })
 }
 
+function handleWifiConn(connected) {
+  let style = document.getElementById('status-conn').style
+  if (connected) style.backgroundColor = COLOR_OK
+  else style.backgroundColor = COLOR_ERR
+}
 
 /*------------------------------------------------*/

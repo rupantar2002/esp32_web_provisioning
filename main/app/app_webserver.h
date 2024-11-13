@@ -10,7 +10,6 @@ typedef enum
     APP_WEBSERVER_REQUEST_NULL = 0,
     APP_WEBSERVER_REQUEST_PROVSN,
     APP_WEBSERVER_REQUEST_SCAN_START,
-    APP_WEBSERVER_REQUEST_SCAN_STOP,
     APP_WEBSERVER_REQUEST_MAX,
 } app_webserver_Request_t;
 
@@ -27,18 +26,31 @@ typedef union
 typedef enum
 {
     APP_WEBSERVER_REPONCE_NULL = 0,
-    APP_WEBSERVER_REPONCE_CONNECTION,
-    APP_WEBSERVER_REPONCE_SCANLIST,
+    APP_WEBSERVER_REPONCE_PROVSN,
+    APP_WEBSERVER_REPONCE_WIFI_CONN,
+    APP_WEBSERVER_REPONCE_SCAN,
     APP_WEBSERVER_REPONCE_MAX,
 } app_webserver_Responce_t;
 
 typedef union
 {
+    app_Status_t status; /* needs to check status of the event before donig anything*/
+
     struct
     {
         uint16_t count;
         intf_wifi_ApRecord_t *records;
-    } scanlist;
+    } scan;
+
+    struct
+    {
+        bool accepted;
+    } provsn;
+
+    struct
+    {
+        bool connected;
+    } wifiConn;
 
 } app_webserver_ResponceData_t;
 
@@ -50,6 +62,6 @@ typedef struct
 } app_webserver_UserData_t;
 
 app_Status_t app_webserver_SendResponce(app_webserver_Responce_t resp,
-                                  const app_webserver_ResponceData_t *pData);
+                                        const app_webserver_ResponceData_t *pData);
 
 #endif //__APP_WEBSERVER_H__

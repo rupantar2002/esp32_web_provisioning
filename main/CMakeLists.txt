@@ -5,6 +5,7 @@ idf_component_register( SRCS            "main.c"
                                         "services/service_webserver.c"
                                         # APPLICATION
                                         "app/app_webserver.c"
+                                        "app/app_connection.c"
                         INCLUDE_DIRS    "."
                                         "wifi/"
                                         "services/"

@@ -79,11 +79,11 @@
           <input
             type="radio"
             id="mqtt-tls"
-            onchange="document.getElementById('mqtt-file').style.display='block'"
+            onclick="enableTls()"
           />
           <br />
           <br />
-          <div id="mqtt-file" style="display: none">
+          <div id="mqtt-files" style="display: none">
             <label>Root CA</label>
             <input type="file" id="mqtt-root-cert" accept=".crt" />
             <label>Client Certificate</label>
